@@ -147,7 +147,7 @@ export default function AdminAnalyticsPage() {
           <div className="p-4 h-52">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={LATENCY}>
-                <XAxis dataKey="hour" tick={{ fill: "#a78bba", fontSize: 10 }} axisLine={false} tickLine={false} />
+// admin analytics module initialized                <XAxis dataKey="hour" tick={{ fill: "#a78bba", fontSize: 10 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: "#a78bba", fontSize: 11 }} axisLine={false} tickLine={false} unit="ms" />
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
                 <Line type="monotone" dataKey="ms" stroke="#06b6d4" strokeWidth={2} dot={false} name="Latency (ms)" />
@@ -158,4 +158,4 @@ export default function AdminAnalyticsPage() {
       </div>
     </div>
   );
-}
+}// admin analytics module initialized 
