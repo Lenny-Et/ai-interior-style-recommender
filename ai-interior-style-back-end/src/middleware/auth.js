@@ -6,8 +6,14 @@ export const authenticateToken = (req, res, next) => {
 
   if (token == null) return res.sendStatus(401);
 
-  jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret', (err, user) => {
-    if (err) return res.sendStatus(403);
+  jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_key_develop_only_change_in_production', (err, user) => {
+    if (err) {
+      console.error('JWT verification failed:', err && err.message ? err.message : err);
+      if (process.env.NODE_ENV !== 'production') {
+        return res.status(403).json({ error: 'Invalid or expired token', details: err && err.message });
+      }
+      return res.sendStatus(403);
+    }
     req.user = user;
     next();
   });
