@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, readdirSync, statSync } from "fs";
+// Styling normalization script execluded
+// import { readFileSync, writeFileSync, readdirSync, statSync } from "fs";
 import { join, extname } from "path";
 
 const EXTS = new Set([".tsx", ".ts", ".css"]);
