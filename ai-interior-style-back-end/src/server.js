@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
+import portfolioRoutes from './routes/portfolio.js';
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ if (process.env.MONGODB_URI) {
 }
 
 app.use('/api/auth', authRoutes);
+app.use('/api/portfolio', portfolioRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Auth service running' });
