@@ -1,36 +1,166 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
 import {
   Ticket, Clock, CheckCircle, Upload, Eye,
-  MessageCircle, X, AlertCircle, Send,
+  MessageCircle, X, AlertCircle, Send, Paperclip, Image as ImageIcon
 } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
+import { apiClient } from "@/lib/api-client";
+import { useAppStore } from "@/lib/store";
+import toast from "react-hot-toast";
 
-type Status = "New" | "Accepted" | "In-Progress" | "Delivered" | "Completed";
+type Status = "Pending" | "In-Progress" | "Review" | "Completed" | "Cancelled";
 
-const REQUESTS = [
-  { id: "TK-101", client: "Alex Johnson",  avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80&h=80&fit=crop", room: "Living Room",  budget: "$2,000", status: "In-Progress" as Status, created: "2026-03-20", desc: "Modern minimalist redesign with neutral palette. More natural light is important to me.", photos: ["https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop","https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=300&h=200&fit=crop"] },
-  { id: "TK-102", client: "Maria Santos",  avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b47c?w=80&h=80&fit=crop", room: "Bedroom",      budget: "$1,200", status: "New" as Status,         created: "2026-04-07", desc: "Scandinavian bedroom with warm tones and smart storage. Prefer oak wood finishes.", photos: [] },
-  { id: "TK-103", client: "Chris Nguyen",  avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80&h=80&fit=crop", room: "Home Office",   budget: "$800",   status: "Delivered" as Status,   created: "2026-03-28", desc: "Productive home office with industrial vibes. Need good cable management.", photos: ["https://images.unsplash.com/photo-1600210492486-724fe5c67fb0?w=300&h=200&fit=crop"] },
-  { id: "TK-104", client: "Emma Walsh",    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&h=80&fit=crop", room: "Dining Room",  budget: "$3,500", status: "Completed" as Status,    created: "2026-02-12", desc: "Elegant art deco dining room for entertaining guests.", photos: [] },
-];
+interface CustomRequest {
+  _id: string;
+  title: string;
+  description: string;
+  roomType: string;
+  budget: number;
+  currency: string;
+  urgency: string;
+  status: Status;
+  homeownerId: {
+    _id: string;
+    profile: {
+      firstName: string;
+      lastName: string;
+    };
+    email: string;
+  };
+  designerId?: {
+    _id: string;
+    profile: {
+      firstName: string;
+      lastName: string;
+    };
+    email: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+  attachments: Array<{
+    filename: string;
+    originalName: string;
+    url: string;
+  }>;
+  messages: Array<{
+    sender: string;
+    message: string;
+    createdAt: string;
+  }>;
+}
 
 const STATUS_META: Record<Status, { variant: "blue"|"gold"|"brand"|"green"|"gray"; label: string }> = {
-  New:         { variant: "gold",  label: "New Request" },
-  Accepted:    { variant: "blue",  label: "Accepted" },
+  Pending:      { variant: "gold",  label: "New Request" },
   "In-Progress":{ variant: "brand", label: "In Progress" },
-  Delivered:   { variant: "blue",  label: "Delivered" },
-  Completed:   { variant: "green", label: "Completed" },
+  Review:       { variant: "blue",  label: "Review" },
+  Completed:    { variant: "green", label: "Completed" },
+  Cancelled:    { variant: "gray",  label: "Cancelled" },
 };
 
 export default function DesignerRequestsPage() {
-  const [active, setActive] = useState<string | null>(REQUESTS[0].id);
+  const [requests, setRequests] = useState<CustomRequest[]>([]);
+  const [availableRequests, setAvailableRequests] = useState<CustomRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [active, setActive] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const ticket = REQUESTS.find((r) => r.id === active);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [showAvailable, setShowAvailable] = useState(false);
+
+  useEffect(() => {
+    loadRequests();
+    loadAvailableRequests();
+  }, []);
+
+  const loadRequests = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.getCustomRequests(1, 20);
+      const requestsData = (response as any).data || response;
+      setRequests(requestsData.requests || []);
+      if (requestsData.requests?.length > 0) {
+        setActive(requestsData.requests[0]._id);
+      }
+    } catch (error: any) {
+      toast.error(error.error || error.message || "Failed to load requests");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadAvailableRequests = async () => {
+    try {
+      const response = await apiClient.getAvailableCustomRequests(1, 20);
+      const availableData = (response as any).data || response;
+      setAvailableRequests(availableData.requests || []);
+    } catch (error: any) {
+      console.error("Failed to load available requests:", error);
+    }
+  };
+
+  const acceptRequest = async (requestId: string) => {
+    try {
+      console.log('acceptRequest called with requestId:', requestId);
+      
+      // Get the actual logged-in designer's ID from the store
+      const { user } = useAppStore.getState();
+      if (!user || user.role !== 'designer') {
+        toast.error("Only designers can accept requests");
+        return;
+      }
+      
+      console.log('Assigning designer:', user.id, 'to request:', requestId);
+      await apiClient.assignDesignerToRequest(requestId, user.id);
+      toast.success("Request accepted successfully!");
+      loadRequests();
+      loadAvailableRequests();
+    } catch (error: any) {
+      console.error('acceptRequest error:', error);
+      toast.error(error.error || error.message || "Failed to accept request");
+    }
+  };
+
+  const updateStatus = async (requestId: string, status: string) => {
+    try {
+      await apiClient.updateCustomRequestStatus(requestId, status);
+      toast.success("Status updated successfully!");
+      loadRequests();
+    } catch (error: any) {
+      toast.error(error.error || error.message || "Failed to update status");
+    }
+  };
+
+  const sendMessage = async () => {
+    if ((!message.trim() && attachments.length === 0) || !active) return;
+    
+    try {
+      let uploadedFiles: any[] = [];
+      if (attachments.length > 0) {
+        const formData = new FormData();
+        attachments.forEach(file => {
+          formData.append('files', file);
+        });
+        const uploadResponse = await apiClient.uploadFiles(formData);
+        const uploadData = (uploadResponse as any).data || uploadResponse;
+        uploadedFiles = uploadData.files || [];
+      }
+
+      await apiClient.addCustomRequestMessage(active, message || "Sent an attachment", uploadedFiles);
+      setMessage("");
+      setAttachments([]);
+      toast.success("Message sent successfully!");
+      loadRequests();
+    } catch (error: any) {
+      toast.error(error.error || error.message || "Failed to send message");
+    }
+  };
+
+  const allRequests = showAvailable ? availableRequests : requests;
+  const ticket = allRequests.find((r) => r._id === active);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -39,37 +169,81 @@ export default function DesignerRequestsPage() {
         <p className="text-text-muted text-sm">Manage incoming and active design commissions</p>
       </div>
 
+      {/* Toggle between assigned and available requests */}
+      <div className="flex gap-2">
+        <Button 
+          variant={!showAvailable ? "brand" : "ghost"} 
+          size="sm"
+          onClick={() => setShowAvailable(false)}
+        >
+          My Requests ({requests.length})
+        </Button>
+        <Button 
+          variant={showAvailable ? "brand" : "ghost"} 
+          size="sm"
+          onClick={() => setShowAvailable(true)}
+        >
+          Available ({availableRequests.length})
+        </Button>
+      </div>
+
       {/* Summary bar */}
       <div className="flex gap-3 flex-wrap">
-        {[["New", "gold"],["In-Progress","brand"],["Delivered","blue"],["Completed","green"]] .map(([s, v]) => {
-          const count = REQUESTS.filter((r) => r.status === s).length;
-          return count > 0 ? <Badge key={s} variant={v as any}>{s}: {count}</Badge> : null;
+        {["Pending", "In-Progress", "Review", "Completed"].map((status) => {
+          const count = allRequests.filter((r) => r.status === status).length;
+          return count > 0 ? (
+            <Badge key={status} variant={STATUS_META[status as Status].variant as any}>
+              {STATUS_META[status as Status].label}: {count}
+            </Badge>
+          ) : null;
         })}
       </div>
 
       <div className="grid lg:grid-cols-[320px_1fr] gap-5">
         {/* List */}
         <div className="space-y-2">
-          {REQUESTS.map((r) => {
-            const { variant } = STATUS_META[r.status];
-            return (
-              <button key={r.id} onClick={() => setActive(r.id)}
-                className={cn("w-full text-left p-4 rounded-2xl border transition-all",
-                  active === r.id ? "border-brand-500 bg-brand-600/10 shadow-glow-sm" : "border-surface-border bg-surface-card hover:border-brand-500/40"
-                )}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-mono text-text-muted">{r.id}</span>
-                  <Badge variant={variant}>{r.status}</Badge>
-                </div>
-                <div className="flex items-center gap-2 mb-1">
-                  <Avatar src={r.avatar} name={r.client} size="xs" />
-                  <p className="text-sm font-semibold text-white">{r.client}</p>
-                </div>
-                <p className="text-xs text-text-muted">{r.room} · {r.budget}</p>
-                <p className="text-[10px] text-text-muted mt-1"><Clock className="w-3 h-3 inline mr-0.5" />{formatDate(r.created)}</p>
-              </button>
-            );
-          })}
+          {loading ? (
+            <div className="text-center py-8 text-text-muted">
+              <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+              <p className="text-sm">Loading requests...</p>
+            </div>
+          ) : allRequests.length === 0 ? (
+            <div className="text-center py-8 text-text-muted">
+              <Ticket className="w-8 h-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm font-semibold text-white">No requests found</p>
+              <p className="text-xs mt-1">
+                {showAvailable ? "No available requests at the moment" : "You haven't accepted any requests yet"}
+              </p>
+            </div>
+          ) : (
+            allRequests.map((r) => {
+              const { variant } = STATUS_META[r.status];
+              return (
+                <button key={r._id} onClick={() => setActive(r._id)}
+                  className={cn("w-full text-left p-4 rounded-2xl border transition-all",
+                    active === r._id ? "border-brand-500 bg-brand-600/10 shadow-glow-sm" : "border-surface-border bg-surface-card hover:border-brand-500/40"
+                  )}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-mono text-text-muted">{r._id.slice(-6)}</span>
+                    <Badge variant={variant}>{STATUS_META[r.status].label}</Badge>
+                  </div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Avatar 
+                      name={`${r.homeownerId.profile.firstName} ${r.homeownerId.profile.lastName}`} 
+                      size="xs" 
+                    />
+                    <p className="text-sm font-semibold text-white">
+                      {r.homeownerId.profile.firstName} {r.homeownerId.profile.lastName}
+                    </p>
+                  </div>
+                  <p className="text-xs text-text-muted">{r.roomType} · ${r.budget.toLocaleString()}</p>
+                  <p className="text-[10px] text-text-muted mt-1">
+                    <Clock className="w-3 h-3 inline mr-0.5" />{formatDate(r.createdAt)}
+                  </p>
+                </button>
+              );
+            })
+          )}
         </div>
 
         {/* Detail */}
@@ -78,18 +252,29 @@ export default function DesignerRequestsPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <Avatar src={ticket.avatar} name={ticket.client} size="md" />
+                  <Avatar 
+                    name={`${ticket.homeownerId.profile.firstName} ${ticket.homeownerId.profile.lastName}`} 
+                    size="md" 
+                  />
                   <div>
-                    <p className="font-semibold text-white">{ticket.client}</p>
-                    <p className="text-xs text-text-muted">{ticket.id} · {ticket.room} · {ticket.budget}</p>
+                    <p className="font-semibold text-white">
+                      {ticket.homeownerId.profile.firstName} {ticket.homeownerId.profile.lastName}
+                    </p>
+                    <p className="text-xs text-text-muted">
+                      {ticket._id.slice(-6)} · {ticket.roomType} · ${ticket.budget.toLocaleString()}
+                    </p>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  {ticket.status === "New" && (
-                    <Button size="sm"><CheckCircle className="w-3.5 h-3.5" /> Accept</Button>
+                  {showAvailable && ticket && ticket.status === "Pending" && (
+                    <Button size="sm" onClick={() => acceptRequest(ticket._id)}>
+                      <CheckCircle className="w-3.5 h-3.5" /> Accept
+                    </Button>
                   )}
-                  {ticket.status === "New" && (
-                    <Button variant="destructive" size="sm"><X className="w-3.5 h-3.5" /> Decline</Button>
+                  {!showAvailable && ticket && ticket.status === "In-Progress" && (
+                    <Button size="sm" onClick={() => updateStatus(ticket._id, "Review")}>
+                      <Upload className="w-3.5 h-3.5" /> Submit
+                    </Button>
                   )}
                 </div>
               </div>
@@ -97,32 +282,21 @@ export default function DesignerRequestsPage() {
             <CardBody className="space-y-5">
               <div>
                 <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Client Brief</p>
-                <p className="text-sm text-purple-100 leading-relaxed">{ticket.desc}</p>
+                <p className="text-sm text-purple-100 leading-relaxed">{ticket.description}</p>
               </div>
 
-              {ticket.photos.length > 0 && (
+              {ticket.attachments && ticket.attachments.length > 0 && (
                 <div>
                   <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Client Room Photos</p>
                   <div className="flex gap-2 flex-wrap">
-                    {ticket.photos.map((src, i) => (
-                      <img key={i} src={src} alt="" className="w-32 h-24 object-cover rounded-xl border border-surface-border hover:opacity-80 cursor-pointer transition-opacity" />
+                    {ticket.attachments.map((attachment, i) => (
+                      <img key={i} src={attachment.url} alt={attachment.originalName} className="w-32 h-24 object-cover rounded-xl border border-surface-border hover:opacity-80 cursor-pointer transition-opacity" />
                     ))}
                   </div>
                 </div>
               )}
 
-              {ticket.status === "In-Progress" && (
-                <div className="p-4 rounded-xl border border-brand-500/20 bg-brand-600/5">
-                  <p className="text-xs font-semibold text-brand-300 mb-2 flex items-center gap-1"><Upload className="w-3.5 h-3.5" /> Upload Revised Design</p>
-                  <div className="border-2 border-dashed border-brand-500/30 rounded-xl p-4 text-center hover:bg-brand-600/5 cursor-pointer transition-colors">
-                    <Upload className="w-6 h-6 text-brand-400 mx-auto mb-1" />
-                    <p className="text-xs text-text-muted">Drop your design files here</p>
-                  </div>
-                  <Button className="w-full mt-2" size="sm">Send for Client Review</Button>
-                </div>
-              )}
-
-              {ticket.status === "Delivered" && (
+              {ticket.status === "Review" && (
                 <div className="p-3 rounded-xl border border-gold-500/20 bg-gold-500/5 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-gold-400 shrink-0 mt-0.5" />
                   <div>
@@ -132,18 +306,71 @@ export default function DesignerRequestsPage() {
                 </div>
               )}
 
+              {/* Messages */}
+              {ticket.messages && ticket.messages.length > 0 && (
+                <div>
+                  <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Messages</p>
+                  <div className="space-y-2 max-h-32 overflow-y-auto">
+                    {ticket.messages.map((msg, i) => (
+                      <div key={i} className="text-xs mb-3">
+                        {msg.attachments && msg.attachments.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-1 mt-1">
+                            {msg.attachments.map((file, idx) => (
+                              <img key={idx} src={file.url} alt="attachment" className="w-20 h-20 object-cover rounded-md border border-surface-border" />
+                            ))}
+                          </div>
+                        )}
+                        <span className="font-medium text-white">{msg.sender}:</span> {msg.message}
+                        <span className="text-text-muted ml-2">{formatDate(msg.createdAt)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Quick message */}
-              {ticket.status !== "Completed" && (
+              {ticket.status !== "Completed" && ticket.status !== "Cancelled" && (
                 <div>
                   <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Quick Message</p>
+                  {attachments.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {attachments.map((file, idx) => (
+                        <div key={idx} className="flex items-center gap-2 bg-surface px-3 py-1.5 rounded-lg border border-surface-border text-xs text-white">
+                          <ImageIcon className="w-3 h-3 text-brand-400" />
+                          <span className="truncate max-w-[150px]">{file.name}</span>
+                          <button onClick={() => setAttachments(prev => prev.filter((_, i) => i !== idx))} className="text-text-muted hover:text-red-400 ml-1">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex gap-2">
+                    <input
+                      type="file"
+                      id="designer-chat-upload"
+                      className="hidden"
+                      multiple
+                      accept="image/*"
+                      onChange={(e) => {
+                        if (e.target.files) {
+                          setAttachments(prev => [...prev, ...Array.from(e.target.files || [])]);
+                        }
+                      }}
+                    />
+                    <label htmlFor="designer-chat-upload" className="flex items-center justify-center px-3 rounded-xl bg-surface border border-surface-border hover:border-brand-500/50 cursor-pointer transition-colors text-text-muted hover:text-white shrink-0">
+                      <Paperclip className="w-4 h-4" />
+                    </label>
                     <input
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
-                      placeholder={`Message ${ticket.client.split(" ")[0]}…`}
+                      placeholder={`Message ${ticket.homeownerId.profile.firstName}…`}
                       className="flex-1 px-3.5 py-2.5 rounded-xl bg-surface border border-surface-border text-sm text-purple-100 placeholder-text-muted focus:outline-none focus:border-brand-500 transition-all"
+                      onKeyPress={(e) => e.key === "Enter" && sendMessage()}
                     />
-                    <Button size="sm" onClick={() => setMessage("")}><Send className="w-3.5 h-3.5" /></Button>
+                    <Button size="sm" onClick={sendMessage} disabled={!message.trim() && attachments.length === 0}>
+                      <Send className="w-3.5 h-3.5" />
+                    </Button>
                   </div>
                 </div>
               )}
