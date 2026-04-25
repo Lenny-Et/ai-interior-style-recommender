@@ -7,6 +7,7 @@ import { Sparkles, Mail, Lock, User, Eye, EyeOff, ArrowRight, Home, Briefcase, C
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import { useAppStore } from "@/lib/store";
 
 type Role = "homeowner" | "designer";
 
@@ -22,13 +23,30 @@ export default function RegisterPage() {
   const [step, setStep]       = useState(1);
   const [form, setForm] = useState({ name: "", email: "", password: "" });
   const router = useRouter();
+  const { register, isLoading, error } = useAppStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1400));
-    toast.success("Account created! Welcome to Aura.");
-    router.push(role === "designer" ? "/designer" : "/dashboard");
+    
+    try {
+      const [firstName, ...lastNameParts] = form.name.split(' ');
+      const lastName = lastNameParts.join(' ');
+      
+      await register({
+        email: form.email,
+        password: form.password,
+        role: role,
+        profile: {
+          firstName,
+          lastName: lastName || '',
+        }
+      });
+      
+      toast.success("Account created! Welcome to Aura.");
+      router.push(role === "designer" ? "/designer" : "/dashboard");
+    } catch (error: any) {
+      toast.error(error.error || error.message || "Registration failed. Please try again.");
+    }
   };
 
   return (
@@ -112,10 +130,15 @@ export default function RegisterPage() {
               </p>
               <div className="flex gap-2 pt-1">
                 <Button variant="ghost" onClick={() => setStep(1)} type="button">Back</Button>
-                <Button type="submit" fullWidth loading={loading}>
+                <Button type="submit" fullWidth loading={isLoading || loading}>
                   Create Account <ArrowRight className="w-4 h-4" />
                 </Button>
               </div>
+              {error && (
+                <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/40 text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
             </form>
           )}
         </div>
