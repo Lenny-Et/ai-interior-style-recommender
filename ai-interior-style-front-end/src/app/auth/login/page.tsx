@@ -6,19 +6,25 @@ import Input from "@/components/ui/Input";
 import { Sparkles, Mail, Lock, Eye, EyeOff, ArrowRight, Github, Chrome } from "lucide-react";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
+import { useAppStore } from "@/lib/store";
 
 export default function LoginPage() {
   const [showPw, setShowPw]   = useState(false);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({ email: "", password: "" });
   const router = useRouter();
+  const { login, isLoading, error } = useAppStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    toast.success("Welcome back!");
-    router.push("/dashboard");
+    
+    try {
+      await login(form.email, form.password);
+      toast.success("Welcome back!");
+      router.push("/dashboard");
+    } catch (error: any) {
+      toast.error(error.error || error.message || "Login failed. Please try again.");
+    }
   };
 
   return (
@@ -107,9 +113,14 @@ export default function LoginPage() {
               </label>
               <Link href="/auth/forgot-password" className="text-brand-400 hover:text-brand-300 transition-colors">Forgot password?</Link>
             </div>
-            <Button type="submit" fullWidth size="lg" loading={loading} className="mt-2">
+            <Button type="submit" fullWidth size="lg" loading={isLoading || loading} className="mt-2">
               Sign In <ArrowRight className="w-4 h-4" />
             </Button>
+            {error && (
+              <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/40 text-red-400 text-sm">
+                {error}
+              </div>
+            )}
           </form>
 
           <p className="text-center text-sm text-text-muted mt-6">
