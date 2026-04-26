@@ -4,15 +4,16 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Sparkles, Images, Heart, Users, MessageSquare,
   ShoppingBag, CreditCard, Settings, BarChart2, Shield, UserCheck,
-  DollarSign, Ticket, PanelLeft, LogOut, Briefcase, Bell,
+  DollarSign, Ticket, PanelLeft, LogOut, Briefcase, Bell, Star,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 const navByRole = {
   homeowner: [
     { label: "Dashboard",       href: "/dashboard",              icon: LayoutDashboard },
     { label: "AI Recommender",  href: "/dashboard/ai",           icon: Sparkles },
+    { label: "My Designs",      href: "/dashboard/my-designs",    icon: Star },
     { label: "Discover Feed",   href: "/dashboard/feed",         icon: Images },
     { label: "Style Boards",    href: "/dashboard/boards",       icon: Heart },
     { label: "Designer Search", href: "/dashboard/designers",    icon: Users },
@@ -42,9 +43,10 @@ const navByRole = {
 };
 
 export default function Sidebar() {
-  const { user, sidebarOpen } = useAppStore();
+  const { user, sidebarOpen, logout } = useAppStore();
   const role = user?.role ?? "guest";
   const pathname = usePathname();
+  const router = useRouter();
   const items = navByRole[role] ?? [];
 
   return (
@@ -79,7 +81,13 @@ export default function Sidebar() {
 
       {/* Bottom: user + logout */}
       <div className="p-3 border-t border-surface-border">
-        <button className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-all">
+        <button 
+          onClick={() => {
+            logout();
+            router.push('/login');
+          }}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-all"
+        >
           <LogOut className="w-4 h-4 shrink-0" />
           <span>Sign out</span>
         </button>
