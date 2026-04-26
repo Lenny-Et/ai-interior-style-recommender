@@ -133,6 +133,8 @@ async function ultraSeed() {
         imageUrl: imageUrls[i],
         cloudinaryId: `seed_asset_${i}`,
         description: `A breathtaking ${style} ${room} masterfully crafted for a premium feel.`,
+        isApproved: true,
+        approvedAt: new Date(),
         metadata: {
           style: style,
           roomType: room,
