@@ -27,6 +27,13 @@ const boardSchema = new mongoose.Schema({
   coverImage: {
     type: String
   },
+  // User-curated color palette for this board (hex strings, e.g. "#F5E6D3")
+  // Used by the AI personalization engine to inform generation with preferred colors.
+  colorPalette: [{
+    type: String,
+    trim: true,
+    match: /^#[0-9A-Fa-f]{6}$/ // Enforce valid hex
+  }],
   items: [{
     imageUrl:    { type: String, required: true },
     name:        { type: String, default: '' },

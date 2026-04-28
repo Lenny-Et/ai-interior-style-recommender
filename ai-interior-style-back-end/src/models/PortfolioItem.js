@@ -12,7 +12,13 @@ const portfolioItemSchema = new mongoose.Schema({
     title: { type: String, default: 'Untitled Design' },
     featured: { type: Boolean, default: false },
     views: { type: Number, default: 0 }
-  }
+  },
+  isApproved: { type: Boolean, default: false },
+  approvedAt: { type: Date },
+  rejectedAt: { type: Date },
+  rejectionReason: { type: String },
+  editRequestedAt: { type: Date },
+  editRequestNote: { type: String }
 }, { timestamps: true });
 
 // Basic metadata standardization pre-hook to format inputs correctly

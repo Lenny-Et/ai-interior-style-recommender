@@ -7,12 +7,17 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: ['homeowner', 'designer', 'admin'], default: 'homeowner' },
 
   approvalStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' }, // For designers
+  is_verified: { type: Boolean, default: false },
+  specialty: { type: [String], default: [] },
   isPro: { type: Boolean, default: false }, // Indicates if user has a forever pro account
   profile: {
     firstName: String,
     lastName: String,
     company: String,
+    profilePicture: String,
+    profilePictureCloudinaryId: String,
     portfolioUrl: String,
+    bio: String,
     workHistory: [{
       title: String,
       description: String,

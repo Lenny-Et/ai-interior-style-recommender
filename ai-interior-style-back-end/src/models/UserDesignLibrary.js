@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const userDesignLibrarySchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   designId: { type: String, required: true, unique: true }, // Unique identifier for the design
-  transactionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Transaction', required: true },
+  transactionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Transaction', required: false },
   
   // Complete design data that was purchased
   designData: {
@@ -16,7 +16,7 @@ const userDesignLibrarySchema = new mongoose.Schema({
     imageUrl: { type: String, required: true },
     confidence: { type: Number },
     templateType: { type: String },
-    isPremium: { type: Boolean, default: true },
+    isPremium: { type: Boolean, default: false },
     recommendationId: { type: String }, // Original recommendation id (e.g. 'scandi-simplicity-001')
     metadata: {
       style: { type: String },
@@ -41,10 +41,10 @@ const userDesignLibrarySchema = new mongoose.Schema({
   
   // Purchase information
   purchaseInfo: {
-    amount: { type: Number, required: true },
+    amount: { type: Number, required: false, default: 0 },
     purchaseDate: { type: Date, default: Date.now },
-    paymentMethod: { type: String, default: 'chapa' },
-    transactionRef: { type: String, required: true }
+    paymentMethod: { type: String, default: 'free_generation' },
+    transactionRef: { type: String, required: false, default: 'free-generation' }
   },
   
   // User interactions

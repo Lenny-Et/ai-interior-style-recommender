@@ -6,9 +6,13 @@ const saveSchema = new mongoose.Schema({
     ref: 'User', 
     required: true 
   },
+  boardId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Board'
+  },
   targetType: { 
     type: String, 
-    enum: ['design', 'portfolio'], 
+    enum: ['design', 'portfolio', 'inspiration'], 
     required: true 
   },
   targetId: { 
@@ -20,10 +24,10 @@ const saveSchema = new mongoose.Schema({
 });
 
 // Compound index to prevent duplicate saves and for efficient queries
-saveSchema.index({ userId: 1, targetType: 1, targetId: 1 }, { unique: true });
+saveSchema.index({ userId: 1, boardId: 1, targetType: 1, targetId: 1 }, { unique: true });
 
-// Index for finding saves on specific content
-saveSchema.index({ targetType: 1, targetId: 1 });
+// Index for finding saves on specific boards
+saveSchema.index({ boardId: 1 });
 
 // Index for finding user's saves
 saveSchema.index({ userId: 1 });

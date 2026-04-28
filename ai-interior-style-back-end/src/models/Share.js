@@ -8,7 +8,7 @@ const shareSchema = new mongoose.Schema({
   },
   targetType: { 
     type: String, 
-    enum: ['design', 'portfolio'], 
+    enum: ['design', 'portfolio', 'inspiration'], 
     required: true 
   },
   targetId: { 

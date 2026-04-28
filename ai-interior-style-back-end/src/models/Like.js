@@ -8,7 +8,7 @@ const likeSchema = new mongoose.Schema({
   },
   targetType: { 
     type: String, 
-    enum: ['portfolio', 'design'], 
+    enum: ['portfolio', 'design', 'inspiration'], 
     required: true 
   },
   targetId: { 
