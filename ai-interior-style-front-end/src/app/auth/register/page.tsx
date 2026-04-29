@@ -27,7 +27,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setLoading(true);
     await new Promise((r) => setTimeout(r, 1400));
-    toast.success("Account created! Welcome to Aura.");
+    toast.success("Account created! Welcome to Homitify.");
     router.push(role === "designer" ? "/designer" : "/dashboard");
   };
 
@@ -64,7 +64,7 @@ export default function RegisterPage() {
           {step === 1 ? (
             <div>
               <h2 className="font-semibold text-white mb-1">I am a…</h2>
-              <p className="text-sm text-text-muted mb-5">Choose how you'll use Aura Interiors</p>
+              <p className="text-sm text-text-muted mb-5">Choose how you'll use Homitify Interiors</p>
               <div className="grid grid-cols-2 gap-3 mb-6">
                 {ROLES.map(({ value, label, icon: Icon, desc }) => (
                   <button

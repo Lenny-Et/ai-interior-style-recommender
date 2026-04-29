@@ -7,15 +7,15 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 const playfair = Playfair_Display({ subsets: ["latin"], variable: "--font-playfair", display: "swap" });
 
 export const metadata: Metadata = {
-  title: { default: "Aura Interiors – AI-Powered Interior Design", template: "%s | Aura Interiors" },
-  description: "Get personalized AI interior design recommendations, hire professional designers, and transform your space with Aura Interiors.",
+  title: { default: "Homitify Interiors – AI-Powered Interior Design", template: "%s | Homitify Interiors" },
+  description: "Get personalized AI interior design recommendations, hire professional designers, and transform your space with Homitify Interiors.",
   keywords: ["interior design", "AI design", "room recommendations", "home decor", "professional designers"],
-  authors: [{ name: "Aura Interiors" }],
+  authors: [{ name: "Homitify Interiors" }],
   openGraph: {
     type: "website",
     locale: "en_US",
-    siteName: "Aura Interiors",
-    title: "Aura Interiors – AI-Powered Interior Design",
+    siteName: "Homitify Interiors",
+    title: "Homitify Interiors – AI-Powered Interior Design",
     description: "Transform your space with personalized AI interior design recommendations.",
   },
 };

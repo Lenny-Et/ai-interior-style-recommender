@@ -28,7 +28,7 @@ export default function Navbar() {
           <Sparkles className="w-3.5 h-3.5 text-white" />
         </div>
         <span className="font-display font-bold text-white text-lg hidden sm:block">
-          Aura<span className="gradient-text">.</span>
+          Homitify<span className="gradient-text">.</span>
         </span>
       </Link>
 

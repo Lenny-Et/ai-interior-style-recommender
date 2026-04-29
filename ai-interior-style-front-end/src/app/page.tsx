@@ -42,7 +42,7 @@ const STATS = [
 
 const QUIZ_STYLES = [
   { label: "Modern",       img: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=200&h=200&fit=crop" },
-  { label: "Bohemian",     img: "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=200&h=200&fit=crop" },
+  { label: "Minimalistic", img: "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=200&h=200&fit=crop" },
   { label: "Industrial",   img: "https://images.unsplash.com/photo-1556909172-54557c7e4fb7?w=200&h=200&fit=crop" },
   { label: "Scandinavian", img: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=200&h=200&fit=crop" },
   { label: "Japandi",      img: "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=200&h=200&fit=crop" },
@@ -66,11 +66,9 @@ export default function LandingPage() {
       <header className="sticky top-0 z-40 border-b border-surface-border bg-surface/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-violet-600 flex items-center justify-center shadow-glow-sm">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
+            
             <span className="font-display font-bold text-white text-xl">
-              Aura<span className="gradient-text">.</span>
+              Homitify<span className="gradient-text">.</span>
             </span>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-text-muted">
@@ -98,9 +96,7 @@ export default function LandingPage() {
         <div className="orb orb-gold w-[300px] h-[300px] bottom-0 left-1/3 opacity-20 pointer-events-none absolute" />
 
         <div className="relative max-w-7xl mx-auto text-center">
-          <Badge variant="brand" className="mb-6 animate-fade-in">
-            <Sparkles className="w-3 h-3" /> Powered by Gemini AI
-          </Badge>
+          
           <h1 className="font-display text-5xl sm:text-6xl md:text-7xl font-bold leading-tight mb-6 animate-slide-up">
             Design Your Dream
             <br />
@@ -308,14 +304,14 @@ export default function LandingPage() {
           <div className="w-6 h-6 rounded-md bg-gradient-to-br from-brand-600 to-violet-600 flex items-center justify-center">
             <Sparkles className="w-3 h-3 text-white" />
           </div>
-          <span className="font-display font-bold text-white">Aura Interiors</span>
+          <span className="font-display font-bold text-white">Homitify Interiors</span>
         </div>
         <div className="flex flex-wrap justify-center gap-5 mb-4">
           {["Privacy","Terms","About","Blog","Contact","FAQ"].map((l) => (
             <Link key={l} href={`/${l.toLowerCase()}`} className="hover:text-white transition-colors">{l}</Link>
           ))}
         </div>
-        <p>© {new Date().getFullYear()} Aura Interiors. All rights reserved.</p>
+        <p>© {new Date().getFullYear()} Homitify Interiors. All rights reserved.</p>
       </footer>
     </div>
   );
