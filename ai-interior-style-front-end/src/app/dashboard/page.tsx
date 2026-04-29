@@ -29,9 +29,22 @@ const STAT_CARDS = [
 ];
 
 export default function HomeownerDashboard() {
-  const { user } = useAppStore();
+  const { user, isAuthenticated } = useAppStore();
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
+  if (!isAuthenticated || !user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-white mb-4">Please log in to access your dashboard</h1>
+          <Link href="/auth/login">
+            <Button size="lg">Sign In</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
