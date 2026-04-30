@@ -10,6 +10,9 @@ import { authenticateToken } from '../middleware/auth.js';
 import { PortfolioItem } from '../models/PortfolioItem.js';
 import { User } from '../models/User.js';
 import { Board } from '../models/Board.js';
+import { Like } from '../models/Like.js';
+import { Follow } from '../models/Follow.js';
+import { InspirationPost } from '../models/InspirationPost.js';
 import { sendNotification } from '../services/notificationService.js';
 
 const router = express.Router();
@@ -117,7 +120,7 @@ router.post('/recommend', authenticateToken, async (req, res) => {
     // Fetch user's styleboard context if personalization is enabled
     let historicalContext = null;
     if (usePersonalization === true) {
-      historicalContext = await getUserBoardContext(userId);
+      historicalContext = await getUserBoardContext(userId, roomType);
       console.log(`Personalization enabled. Historical context: ${historicalContext || 'None found'}`);
     }
 
@@ -464,6 +467,40 @@ async function generateImageWithHuggingFace(prompt, hfInferenceApiBaseUrl, hfAcc
   }
 }
 
+// Helper to save a base64 image data URL to a local file and return its URL
+async function saveBase64Image(base64Data, prefix = 'recommendation') {
+  try {
+    if (!base64Data || !base64Data.startsWith('data:')) {
+      return base64Data; // Return as-is if it's already a URL
+    }
+
+    // Extract the mime type and the base64 payload
+    const matches = base64Data.match(/^data:image\/([a-zA-Z+]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      console.warn('Invalid base64 image format, not saving to file');
+      return base64Data;
+    }
+
+    const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+    const buffer = Buffer.from(matches[2], 'base64');
+    const filename = `${prefix}-${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
+    
+    // Ensure the uploads directory exists
+    const uploadsDir = path.join(process.cwd(), 'uploads');
+    await fsp.mkdir(uploadsDir, { recursive: true });
+
+    const filePath = path.join(uploadsDir, filename);
+    await fsp.writeFile(filePath, buffer);
+
+    const port = process.env.PORT || 5000;
+    // Always use consistent localhost URL matching local uploads
+    return `http://localhost:${port}/uploads/${filename}`;
+  } catch (err) {
+    console.error('Failed to save base64 image locally:', err);
+    return base64Data; // Fallback to raw base64 if saving fails
+  }
+}
+
 async function searchSimilarDesigns(features, styles, roomType) {
   try {
     // Search for portfolio items with similar characteristics
@@ -755,42 +792,167 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget, gemini
   }
 }
 
-async function getUserBoardContext(userId) {
+async function getUserBoardContext(userId, requestedRoomType = null) {
   try {
-    const boards = await Board.find({ userId });
-    if (!boards || boards.length === 0) return null;
-    
-    const allStyles = [];
-    boards.forEach(board => {
-      if (board.items && board.items.length > 0) {
-        board.items.forEach(item => {
-          if (item.style && typeof item.style === 'string') {
-            allStyles.push(item.style);
+    // Fetch all raw personalization signals concurrently to keep it fast
+    const [boards, likes, follows] = await Promise.all([
+      Board.find({ userId }).lean(),
+      Like.find({ userId }).lean(),
+      Follow.find({ followerId: userId }).lean()
+    ]);
+
+    const styleScores = {};
+    const colorCounts = {};
+
+    // Tracks whether a room-specific board anchor was found
+    let roomAnchorStyles = [];
+    let roomAnchorColors = [];
+
+    // 1. Process Boards (Direct user curation)
+    //    - Items matching the requested room type: Anchor Weight = 5.0 (highest priority)
+    //    - Items from other rooms: Standard Weight = 3.0 (strong but not anchoring)
+    if (boards && boards.length > 0) {
+      boards.forEach(board => {
+        if (board.items && board.items.length > 0) {
+          board.items.forEach(item => {
+            if (item.style && typeof item.style === 'string') {
+              const styleName = item.style.trim();
+              if (styleName) {
+                // Room-aware weighting: strongly boost items curated for the exact requested room
+                const isRoomMatch = requestedRoomType &&
+                  item.roomType &&
+                  item.roomType.trim().toLowerCase() === requestedRoomType.trim().toLowerCase();
+                const weight = isRoomMatch ? 5.0 : 3.0;
+                styleScores[styleName] = (styleScores[styleName] || 0) + weight;
+                // Track which styles anchor this specific room for the prompt
+                if (isRoomMatch && !roomAnchorStyles.includes(styleName)) {
+                  roomAnchorStyles.push(styleName);
+                }
+              }
+            }
+          });
+        }
+        if (board.colorPalette && board.colorPalette.length > 0) {
+          board.colorPalette.forEach(color => {
+            if (color && typeof color === 'string') {
+              const hexColor = color.trim().toUpperCase();
+              if (hexColor) {
+                colorCounts[hexColor] = (colorCounts[hexColor] || 0) + 3;
+              }
+            }
+          });
+        }
+      });
+    }
+
+    // 2. Process Likes (Endorsement of designs: Medium Weight = 2.0)
+    if (likes && likes.length > 0) {
+      const portfolioLikeIds = likes.filter(l => l.targetType === 'portfolio').map(l => l.targetId);
+      const inspirationLikeIds = likes.filter(l => l.targetType === 'inspiration').map(l => l.targetId);
+
+      const [likedPortfolios, likedInspirations] = await Promise.all([
+        portfolioLikeIds.length > 0 ? PortfolioItem.find({ _id: { $in: portfolioLikeIds } }).lean() : [],
+        inspirationLikeIds.length > 0 ? InspirationPost.find({ _id: { $in: inspirationLikeIds } }).lean() : []
+      ]);
+
+      likedPortfolios.forEach(item => {
+        if (item.metadata?.style && typeof item.metadata.style === 'string') {
+          const styleName = item.metadata.style.trim();
+          if (styleName) {
+            styleScores[styleName] = (styleScores[styleName] || 0) + 2.0;
+          }
+        }
+        if (item.metadata?.colorPalette && item.metadata.colorPalette.length > 0) {
+          item.metadata.colorPalette.forEach(color => {
+            if (color && typeof color === 'string') {
+              const hexColor = color.trim().toUpperCase();
+              if (hexColor) {
+                colorCounts[hexColor] = (colorCounts[hexColor] || 0) + 2;
+              }
+            }
+          });
+        }
+      });
+
+      likedInspirations.forEach(item => {
+        if (item.metadata?.style && typeof item.metadata.style === 'string') {
+          const styleName = item.metadata.style.trim();
+          if (styleName) {
+            styleScores[styleName] = (styleScores[styleName] || 0) + 2.0;
+          }
+        }
+      });
+    }
+
+    // 3. Process Follows (Designer aesthetic affinity: Light Weight = 1.0)
+    if (follows && follows.length > 0) {
+      const followedDesignerIds = follows.map(f => f.followingId);
+      if (followedDesignerIds.length > 0) {
+        // Fetch up to 20 recent portfolio items from followed designers
+        const designerPortfolios = await PortfolioItem.find({ designerId: { $in: followedDesignerIds } })
+          .sort({ createdAt: -1 })
+          .limit(20)
+          .lean();
+
+        designerPortfolios.forEach(item => {
+          if (item.metadata?.style && typeof item.metadata.style === 'string') {
+            const styleName = item.metadata.style.trim();
+            if (styleName) {
+              styleScores[styleName] = (styleScores[styleName] || 0) + 1.0;
+            }
+          }
+          if (item.metadata?.colorPalette && item.metadata.colorPalette.length > 0) {
+            item.metadata.colorPalette.forEach(color => {
+              if (color && typeof color === 'string') {
+                const hexColor = color.trim().toUpperCase();
+                if (hexColor) {
+                  colorCounts[hexColor] = (colorCounts[hexColor] || 0) + 1;
+                }
+              }
+            });
           }
         });
       }
-    });
-    
-    if (allStyles.length === 0) return null;
-    
-    const styleCounts = {};
-    allStyles.forEach(s => {
-      const styleName = s.trim();
-      if (styleName) {
-        styleCounts[styleName] = (styleCounts[styleName] || 0) + 1;
-      }
-    });
-    
-    const sortedStyles = Object.entries(styleCounts)
+    }
+
+    if (Object.keys(styleScores).length === 0 && Object.keys(colorCounts).length === 0) {
+      return null;
+    }
+
+    // Sort and select top preferences
+    const sortedStyles = Object.entries(styleScores)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
       .map(entry => entry[0]);
-      
-    if (sortedStyles.length === 0) return null;
-    
-    return `User's historical Styleboard shows a strong preference for these styles: ${sortedStyles.join(', ')}.`;
+
+    const sortedColors = Object.entries(colorCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(entry => entry[0]);
+
+    // Build a structured context that separates room-anchored style from exploratory inspiration
+    const contextParts = [];
+
+    // Room-specific anchor: this is the highest-priority signal for the AI
+    if (roomAnchorStyles.length > 0 && requestedRoomType) {
+      contextParts.push(`[ROOM ANCHOR] The user has specifically curated a ${requestedRoomType} Styleboard with these deliberate style choices: ${roomAnchorStyles.join(', ')}. This is their HIGHEST PRIORITY preference for this room and MUST be the dominant direction.`);
+    }
+
+    // General exploratory preferences from likes and follows (lower priority context)
+    const exploratoryStyles = sortedStyles.filter(s => !roomAnchorStyles.includes(s));
+    if (exploratoryStyles.length > 0) {
+      contextParts.push(`[EXPLORATORY INSPIRATION] The user is also interested in these styles from their broader activity (likes, follows): ${exploratoryStyles.join(', ')}. Apply these as subtle secondary influences only — do NOT override the room anchor above.`);
+    }
+
+    if (sortedColors.length > 0) {
+      contextParts.push(`[COLOR PALETTE] Preferred colors synthesized from all sources: ${sortedColors.join(', ')}.`);
+    }
+
+    if (contextParts.length === 0) return null;
+
+    return contextParts.join('\n    ');
   } catch (err) {
-    console.error('Error fetching user board context:', err);
+    console.error('Error fetching user board and affinity context:', err);
     return null;
   }
 }
@@ -923,6 +1085,9 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
       let generatedImageUrl = null;
       try {
         generatedImageUrl = await generateImageWithHuggingFace(imagePrompt, hfInferenceApiBaseUrl, hfAccessToken);
+        if (generatedImageUrl && generatedImageUrl.startsWith('data:image')) {
+          generatedImageUrl = await saveBase64Image(generatedImageUrl, `recommendation-${rec.id || 'design'}`);
+        }
       } catch (hfError) {
         console.error('HF image generation failed, using curated fallback:', hfError.message);
       }
@@ -1024,6 +1189,64 @@ async function saveUserRecommendations(userId, recommendations, imageUrl, metada
       createdAt: aiRecommendation.createdAt,
       recommendationsCount: aiRecommendation.recommendations.length
     });
+
+    // Automatically save these recommendations to the UserDesignLibrary for history tracking
+    try {
+      const { UserDesignLibrary } = await import('../models/UserDesignLibrary.js');
+      for (const rec of aiRecommendation.recommendations) {
+        const designId = `design-${sessionId}-${rec.id || Math.random().toString(36).substring(7)}`;
+        
+        // Skip if already in library (shouldn't happen for a new session, but good guard)
+        const exists = await UserDesignLibrary.findOne({ designId });
+        if (exists) continue;
+
+        const libraryDesign = new UserDesignLibrary({
+          userId: normalizedUserId,
+          designId,
+          designData: {
+            name: rec.name || 'AI Generated Design',
+            description: rec.description || `Beautiful ${rec.style || 'Modern'} ${rec.roomType || 'Living Room'} design.`,
+            style: rec.style || 'Modern',
+            roomType: metadata.roomType || 'Living Room',
+            budget: metadata.budget || '$1,000-$2,500',
+            products: rec.products || [],
+            imageUrl: rec.imageUrl || imageUrl,
+            confidence: rec.confidence || 0.85,
+            isPremium: false, // Generated free designs are basic/non-premium until purchased
+            recommendationId: rec.id,
+            metadata: {
+              style: rec.style || 'Modern',
+              roomType: metadata.roomType || 'Living Room',
+              colorPalette: rec.details?.colorPalette || ['#FFFFFF', '#000000']
+            }
+          },
+          sessionData: {
+            sessionId,
+            originalImageUrl: imageUrl,
+            userPreferences: {
+              roomType: metadata.roomType || 'Living Room',
+              styles: metadata.styles || [],
+              budget: metadata.budget || '$1,000-$2,500'
+            },
+            generatedAt: metadata.generatedAt || new Date()
+          },
+          purchaseInfo: {
+            amount: 0,
+            purchaseDate: new Date(),
+            paymentMethod: 'free_generation',
+            transactionRef: 'free-generation'
+          },
+          status: 'active',
+          accessLevel: 'full'
+        });
+
+        await libraryDesign.save();
+      }
+      console.log(`✅ Automatically populated UserDesignLibrary with ${recommendations.length} history designs.`);
+    } catch (libraryErr) {
+      console.error('Failed to populate UserDesignLibrary with history:', libraryErr);
+    }
+
     return sessionId;
   } catch (error) {
     console.error('Failed to save user recommendations:', error);
@@ -1043,6 +1266,49 @@ async function getUserRecommendations(userId, skip = 0, limit = 10) {
       .skip(skip)
       .limit(limit)
       .lean();
+
+    // Lazy base64 migration for saved sessions
+    for (let i = 0; i < recommendations.length; i++) {
+      const recSession = recommendations[i];
+      let updated = false;
+
+      // Migrate session main imageUrl (original uploaded image)
+      if (recSession.imageUrl && recSession.imageUrl.startsWith('data:image')) {
+        console.log(`Migrating AIRecommendation session imageUrl for session: ${recSession.sessionId}`);
+        const localUrl = await saveBase64Image(recSession.imageUrl, `session-${recSession.sessionId}`);
+        if (localUrl !== recSession.imageUrl) {
+          recSession.imageUrl = localUrl;
+          updated = true;
+        }
+      }
+
+      // Migrate individual recommendation imageUrls
+      if (Array.isArray(recSession.recommendations)) {
+        for (let j = 0; j < recSession.recommendations.length; j++) {
+          const recItem = recSession.recommendations[j];
+          if (recItem.imageUrl && recItem.imageUrl.startsWith('data:image')) {
+            console.log(`Migrating AIRecommendation item imageUrl for item ${recItem.id || j}`);
+            const localUrl = await saveBase64Image(recItem.imageUrl, `recommendation-${recItem.id || j}`);
+            if (localUrl !== recItem.imageUrl) {
+              recItem.imageUrl = localUrl;
+              updated = true;
+            }
+          }
+        }
+      }
+
+      if (updated) {
+        AIRecommendation.updateOne(
+          { _id: recSession._id },
+          { 
+            $set: { 
+              imageUrl: recSession.imageUrl,
+              recommendations: recSession.recommendations
+            } 
+          }
+        ).catch(err => console.error(`Failed to save migrated AIRecommendation for session ${recSession.sessionId}:`, err));
+      }
+    }
 
     return recommendations;
   } catch (error) {
