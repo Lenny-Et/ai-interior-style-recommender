@@ -1,17 +1,39 @@
 import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
+import portfolioRoutes from './routes/portfolio.js';
+import { initNotificationService } from './services/notificationService.js';
+import { startExpirationWorker } from './workers/expirationWorker.js';
 
 dotenv.config();
 
 const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: '*',
+  }
+});
 
 app.use(cors());
 app.use(express.json());
 
-// Check if MONGODB_URI is provided in the dot environment, else will just start server (mock/dev setup)
+// Initialize Services
+initNotificationService(io);
+startExpirationWorker();
+
+io.on('connection', (socket) => {
+  const { userId } = socket.handshake.query;
+  if (userId) {
+    socket.join(userId);
+    console.log(`User ${userId} joined their notification room`);
+  }
+});
+
 if (process.env.MONGODB_URI) {
   mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log('Connected to MongoDB'))
@@ -21,12 +43,14 @@ if (process.env.MONGODB_URI) {
 }
 
 app.use('/api/auth', authRoutes);
+app.use('/api/portfolio', portfolioRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Auth service running' });
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
