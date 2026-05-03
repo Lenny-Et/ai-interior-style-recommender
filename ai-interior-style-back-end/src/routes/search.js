@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { PortfolioItem } from '../models/PortfolioItem.js';
 import { User } from '../models/User.js';
 import { Like } from '../models/Like.js';
@@ -26,7 +27,7 @@ router.get('/designs', async (req, res) => {
     const skip = (pageNum - 1) * limitNum;
 
     // Build query
-    let query = {};
+    let query = { isApproved: true };
 
     // Text search
     if (q) {
@@ -106,6 +107,12 @@ router.get('/designs', async (req, res) => {
         }
       },
       {
+        $addFields: {
+          // Convert designerId to ObjectId if it's a string to ensure lookup works
+          designerId: { $toObjectId: '$designerId' }
+        }
+      },
+      {
         $lookup: {
           from: 'users',
           localField: 'designerId',
@@ -129,16 +136,16 @@ router.get('/designs', async (req, res) => {
               { $multiply: [{ $size: '$shares' }, 0.3] },
               { $divide: [{ $subtract: [new Date(), '$createdAt'] }, 1000 * 60 * 60 * 24] } // Days since creation
             ]
-          }
+          },
+          designerId: { $arrayElemAt: ['$designer', 0] }
         }
-      },
-      { $unwind: '$designer' }
+      }
     );
 
     // Filter by designer verification if requested
     if (designerVerified === 'true') {
       pipeline.push({
-        $match: { 'designer.is_verified': true }
+        $match: { 'designerId.is_verified': true }
       });
     }
 
@@ -218,7 +225,13 @@ router.get('/designers', async (req, res) => {
 
     // Verification filter
     if (verified === 'true') {
-      query.is_verified = true;
+      // Check if any verified designers exist first
+      const verifiedCount = await User.countDocuments({ role: 'designer', is_verified: true });
+      if (verifiedCount > 0) {
+        query.is_verified = true;
+      } else {
+        console.log('No verified designers found, showing all designers instead');
+      }
     } else if (verified === 'false') {
       query.is_verified = false;
     }
@@ -234,8 +247,24 @@ router.get('/designers', async (req, res) => {
       {
         $lookup: {
           from: 'portfolioitems',
-          localField: '_id',
-          foreignField: 'designerId',
+          let: { userId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $or: [
+                        { $eq: ['$designerId', '$$userId'] },
+                        { $eq: ['$designerId', { $toString: '$$userId' }] }
+                      ]
+                    },
+                    { $eq: ['$isApproved', true] }
+                  ]
+                }
+              }
+            }
+          ],
           as: 'portfolio'
         }
       },
@@ -338,12 +367,28 @@ router.get('/designers/:id', async (req, res) => {
     const { id } = req.params;
 
     const pipeline = [
-      { $match: { _id: new (await import('mongoose')).default.Types.ObjectId(id), role: 'designer' } },
+      { $match: { _id: new mongoose.Types.ObjectId(id), role: 'designer' } },
       {
         $lookup: {
           from: 'portfolioitems',
-          localField: '_id',
-          foreignField: 'designerId',
+          let: { userId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $or: [
+                        { $eq: ['$designerId', '$$userId'] },
+                        { $eq: ['$designerId', { $toString: '$$userId' }] }
+                      ]
+                    },
+                    { $eq: ['$isApproved', true] }
+                  ]
+                }
+              }
+            }
+          ],
           as: 'portfolio'
         }
       },
@@ -405,7 +450,7 @@ router.get('/combined', async (req, res) => {
       } : {};
 
       const designs = await PortfolioItem.find(designQuery)
-        .populate('designerId', 'profile profilePicture is_verified')
+        .populate('designerId', 'profile is_verified')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum);

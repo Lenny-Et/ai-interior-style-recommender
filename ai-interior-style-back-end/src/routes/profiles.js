@@ -30,7 +30,13 @@ router.get('/:id', async (req, res) => {
     // If designer, add portfolio and stats
     if (user.role === 'designer') {
       const { PortfolioItem } = await import('../models/PortfolioItem.js');
-      const portfolioItems = await PortfolioItem.find({ designerId: user._id })
+      // Use $or to handle legacy string designerIds and new ObjectIds
+      const portfolioItems = await PortfolioItem.find({ 
+        $or: [
+          { designerId: user._id },
+          { designerId: user._id.toString() }
+        ]
+      })
         .sort({ createdAt: -1 })
         .limit(10);
       

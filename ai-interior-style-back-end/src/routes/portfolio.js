@@ -1,12 +1,28 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { parser, getFileUrl } from '../services/cloudinary.js';
 import { PortfolioItem } from '../models/PortfolioItem.js';
 import { authenticateToken, requireApprovedDesigner } from '../middleware/auth.js';
+import jwt from 'jsonwebtoken';
 
 const router = express.Router();
 
+// Helper to check auth without requiring it
+const optionalAuth = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) return next();
+
+  jwt.verify(token, process.env.JWT_SECRET || 'super_secret_jwt_key_develop_only_change_in_production', (err, user) => {
+    if (err) return next();
+    req.user = user;
+    next();
+  });
+};
+
 // GET - Fetch portfolio items for a designer
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const { designerId, page = 1, limit = 20, status, style, roomType } = req.query;
     
@@ -14,23 +30,34 @@ router.get('/', async (req, res) => {
       return res.status(400).json({ error: 'Designer ID is required' });
     }
 
-    // Build query
-    const query = { designerId };
+    // Build query - handle both ObjectId and string if necessary
+    let query = { designerId: designerId };
     
-    // For development, skip designer validation to allow portfolio testing
-    if (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== undefined) {
-      const { User } = await import('../models/User.js');
-      const designer = await User.findById(designerId);
-      if (!designer) {
-        return res.status(404).json({ error: 'Designer not found' });
-      }
+    if (mongoose.Types.ObjectId.isValid(designerId)) {
+      query = { 
+        $or: [
+          { designerId: designerId },
+          { designerId: new mongoose.Types.ObjectId(designerId) }
+        ]
+      };
     }
     
-    // Add filters if provided
-    if (status) {
-      // Note: PortfolioItem doesn't have status field, but we can simulate it
-      // This might need to be added to the model if needed
+    // Authorization check: Only the designer themselves or an admin can see unapproved items
+    const isOwner = req.user && req.user.userId === designerId;
+    const isAdmin = req.user && req.user.role === 'admin';
+
+    if (!isOwner && !isAdmin) {
+      // Visitors can only see approved items
+      query.isApproved = true;
+    } else if (status) {
+      // Owners can filter by status
+      if (status === 'pending') query.isApproved = false;
+      if (status === 'approved') query.isApproved = true;
+      if (status === 'edit_requested') query.editRequestedAt = { $exists: true };
+      if (status === 'rejected') query.rejectedAt = { $exists: true };
     }
+    
+    // Add other filters
     if (style) {
       query['metadata.style'] = style;
     }
@@ -45,7 +72,7 @@ router.get('/', async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(Number(limit))
-        .populate('designerId', 'email profile.firstName profile.lastName'),
+        .populate('designerId', 'email profile'),
       PortfolioItem.countDocuments(query)
     ]);
 
@@ -68,7 +95,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const item = await PortfolioItem.findById(req.params.id)
-      .populate('designerId', 'email profile.firstName profile.lastName');
+      .populate('designerId', 'email profile');
     
     if (!item) {
       return res.status(404).json({ error: 'Portfolio item not found' });
@@ -99,11 +126,12 @@ router.post('/upload', authenticateToken, requireApprovedDesigner, parser.single
       return res.status(400).json({ error: 'Invalid file type. Only JPEG, PNG, and WebP are allowed.' });
     }
 
-    const { designerId, style, colors, roomType, description, title } = req.body;
+    const { style, colors, roomType, description, title } = req.body;
+    const designerId = req.user.userId;
 
     // Validate required fields
     if (!designerId) {
-      return res.status(400).json({ error: 'Designer ID is required' });
+      return res.status(401).json({ error: 'Authentication required' });
     }
     
     if (!style) {
@@ -127,7 +155,7 @@ router.post('/upload', authenticateToken, requireApprovedDesigner, parser.single
     const colorPalette = colors ? colors.split(',').map(c => c.trim()) : [];
 
     const newItem = new PortfolioItem({
-      designerId,
+      designerId: new mongoose.Types.ObjectId(designerId),
       imageUrl: getFileUrl(req.file),
       cloudinaryId: req.file.filename || req.file.originalname,
       description,
@@ -142,7 +170,7 @@ router.post('/upload', authenticateToken, requireApprovedDesigner, parser.single
     await newItem.save();
     
     res.status(201).json({
-      message: 'Portfolio item uploaded successfully',
+      message: 'Portfolio item uploaded successfully and is pending moderation',
       item: newItem
     });
   } catch (error) {
@@ -183,6 +211,14 @@ router.put('/:id', authenticateToken, requireApprovedDesigner, async (req, res) 
       return res.status(404).json({ error: 'Portfolio item not found' });
     }
 
+    // Authorization check: Only the owner or an admin can edit
+    const isOwner = req.user.userId === item.designerId.toString();
+    const isAdmin = req.user.role === 'admin';
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'You do not have permission to edit this item' });
+    }
+
     // Update fields
     if (description !== undefined) {
       item.description = description;
@@ -193,12 +229,21 @@ router.put('/:id', authenticateToken, requireApprovedDesigner, async (req, res) 
       if (metadata.colorPalette) item.metadata.colorPalette = metadata.colorPalette;
       if (metadata.roomType) item.metadata.roomType = metadata.roomType;
       if (metadata.title) item.metadata.title = metadata.title;
+      if (metadata.featured !== undefined) item.metadata.featured = metadata.featured;
     }
+
+    // Reset moderation status on edit so it can be reviewed again
+    item.isApproved = false;
+    item.approvedAt = undefined;
+    item.rejectedAt = undefined;
+    item.rejectionReason = undefined;
+    item.editRequestedAt = undefined;
+    item.editRequestNote = undefined;
 
     await item.save();
     
     res.json({
-      message: 'Portfolio item updated successfully',
+      message: 'Portfolio item updated and resubmitted for review',
       item
     });
   } catch (error) {

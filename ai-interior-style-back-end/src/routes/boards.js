@@ -1,6 +1,8 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { Board } from '../models/Board.js';
 import { Save } from '../models/Save.js';
+import { InspirationPost } from '../models/InspirationPost.js';
 import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -19,51 +21,56 @@ router.get('/', authenticateToken, async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
-      .populate({
-        path: 'userId',
-        select: 'profile.firstName profile.lastName'
-      });
+      .lean(); // Use lean for faster performance
 
     const total = await Board.countDocuments({ userId });
 
-    // Get save counts for each board
-    const boardsWithCounts = await Promise.all(
-      boards.map(async (board) => {
-        const saveCount = await Save.countDocuments({
-          targetType: 'board',
-          targetId: board._id
-        });
-        const totalCount = saveCount + (board.items?.length || 0);
-        
-        // Get sample items for the board (portfolio items saved to this board)
-        const sampleItems = await Save.find({
-          targetType: 'portfolio',
-          userId: userId
-        })
-        .populate({
-          path: 'targetId',
-          select: 'imageUrl metadata style roomType'
-        })
-        .limit(3);
+    // Optimization: Get save counts for all boards in one query
+    const boardSaveCounts = await Save.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(userId), boardId: { $exists: true } } },
+      { $group: { _id: '$boardId', count: { $sum: 1 } } }
+    ]);
 
-        // Combine portfolio sample items and embedded AI items
-        const portfolioSamples = sampleItems.map(save => save.targetId).filter(item => item);
-        const aiSamples = (board.items || []).map(item => ({
-          _id: item._id,
-          imageUrl: item.imageUrl,
-          metadata: { style: item.style, roomType: item.roomType, description: item.description },
-          source: 'ai_recommendation'
-        }));
-        
-        const combinedSamples = [...aiSamples, ...portfolioSamples].slice(0, 3);
+    // Create a map for quick lookup
+    const countsMap = boardSaveCounts.reduce((acc, curr) => {
+      acc[curr._id.toString()] = curr.count;
+      return acc;
+    }, {});
 
-        return {
-          ...board.toObject(),
-          saveCount: totalCount,
-          sampleItems: combinedSamples
-        };
+    // Get sample items for each board efficiently
+    const boardsWithCounts = await Promise.all(boards.map(async (board) => {
+      const saveCount = countsMap[board._id.toString()] || 0;
+      const totalCount = saveCount + (board.items?.length || 0);
+      
+      // Get up to 3 sample items for this specific board
+      const portfolioSaves = await Save.find({
+        userId,
+        boardId: board._id,
+        targetType: 'portfolio'
       })
-    );
+      .populate({
+        path: 'targetId',
+        select: 'imageUrl metadata style roomType'
+      })
+      .limit(3)
+      .lean();
+
+      const portfolioSamples = portfolioSaves.map(save => save.targetId).filter(item => item);
+      const aiSamples = (board.items || []).slice(0, 3).map(item => ({
+        _id: item._id,
+        imageUrl: item.imageUrl,
+        metadata: { style: item.style, roomType: item.roomType, description: item.description },
+        source: 'ai_recommendation'
+      }));
+      
+      const combinedSamples = [...aiSamples, ...portfolioSamples].slice(0, 3);
+
+      return {
+        ...board,
+        saveCount: totalCount,
+        sampleItems: combinedSamples
+      };
+    }));
 
     res.json({
       boards: boardsWithCounts,
@@ -117,7 +124,7 @@ router.put('/:boardId', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { boardId } = req.params;
-    const { name, description, tags, isPublic, coverImage } = req.body;
+    const { name, description, tags, isPublic, coverImage, colorPalette } = req.body;
 
     const board = await Board.findOne({ _id: boardId, userId });
     if (!board) {
@@ -129,6 +136,8 @@ router.put('/:boardId', authenticateToken, async (req, res) => {
     if (tags !== undefined) board.tags = tags;
     if (isPublic !== undefined) board.isPublic = isPublic;
     if (coverImage !== undefined) board.coverImage = coverImage;
+    // Allow saving an empty array (user cleared the palette) or a new set of colours
+    if (colorPalette !== undefined) board.colorPalette = colorPalette;
 
     await board.save();
     await board.populate({
@@ -187,17 +196,32 @@ router.post('/:boardId/items', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Board not found' });
     }
 
+    // Check if already saved to this specific board
+    const existingSave = await Save.findOne({ userId, boardId, targetType, targetId });
+    if (existingSave) {
+      return res.status(400).json({ error: 'Item already saved to this board' });
+    }
+
     // Create a save record linking the item to the board
     const save = new Save({
       userId,
+      boardId,
       targetType,
       targetId
     });
 
     await save.save();
 
+    // Increment saves count for inspiration posts
+    if (targetType === 'inspiration') {
+      await InspirationPost.findByIdAndUpdate(targetId, { $inc: { savesCount: 1 } });
+    }
+
     res.status(201).json({ message: 'Item added to board successfully' });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'This item is already saved to your boards' });
+    }
     console.error('Add item to board error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -217,6 +241,12 @@ router.post('/:boardId/ai-items', authenticateToken, async (req, res) => {
     const board = await Board.findOne({ _id: boardId, userId });
     if (!board) {
       return res.status(404).json({ error: 'Board not found' });
+    }
+
+    // Check if already in this board
+    const exists = board.items.some(item => item.imageUrl === imageUrl);
+    if (exists) {
+      return res.status(400).json({ error: 'This design is already saved to this board' });
     }
 
     // Add to embedded items array
@@ -287,6 +317,7 @@ router.get('/:boardId/items', authenticateToken, async (req, res) => {
 
     const saves = await Save.find({
       userId,
+      boardId,
       targetType: 'portfolio'
     })
     .populate({

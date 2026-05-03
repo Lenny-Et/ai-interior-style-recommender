@@ -3,8 +3,10 @@ import { Follow } from '../models/Follow.js';
 import { Like } from '../models/Like.js';
 import { Save } from '../models/Save.js';
 import { Share } from '../models/Share.js';
+import { Report } from '../models/Report.js';
 import { User } from '../models/User.js';
 import { PortfolioItem } from '../models/PortfolioItem.js';
+import { InspirationPost } from '../models/InspirationPost.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { sendNotification } from '../services/notificationService.js';
 
@@ -84,7 +86,7 @@ router.get('/followers/:userId', async (req, res) => {
     const skip = (pageNum - 1) * limitNum;
 
     const follows = await Follow.find({ followingId: userId })
-      .populate('followerId', 'email profile profilePicture')
+      .populate('followerId', 'email profile')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum);
@@ -118,7 +120,7 @@ router.get('/following/:userId', async (req, res) => {
     const skip = (pageNum - 1) * limitNum;
 
     const follows = await Follow.find({ followerId: userId })
-      .populate('followingId', 'email profile profilePicture is_verified role')
+      .populate('followingId', 'email profile is_verified role')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum);
@@ -164,7 +166,7 @@ router.post('/like/:targetType/:targetId', authenticateToken, async (req, res) =
     const { targetType, targetId } = req.params;
     
     // Validate target type
-    if (!['portfolio', 'design'].includes(targetType)) {
+    if (!['portfolio', 'design', 'inspiration'].includes(targetType)) {
       return res.status(400).json({ error: 'Invalid target type' });
     }
 
@@ -172,6 +174,8 @@ router.post('/like/:targetType/:targetId', authenticateToken, async (req, res) =
     let content;
     if (targetType === 'portfolio') {
       content = await PortfolioItem.findById(targetId);
+    } else if (targetType === 'inspiration') {
+      content = await InspirationPost.findById(targetId);
     } else {
       // Design items would be in a separate model (to be implemented)
       return res.status(501).json({ error: 'Design likes not yet implemented' });
@@ -190,6 +194,11 @@ router.post('/like/:targetType/:targetId', authenticateToken, async (req, res) =
     // Create like
     const like = new Like({ userId, targetType, targetId });
     await like.save();
+
+    // Increment likes count for inspiration posts
+    if (targetType === 'inspiration') {
+      await InspirationPost.findByIdAndUpdate(targetId, { $inc: { likesCount: 1 } });
+    }
 
     // Send notification to content owner (if not own content)
     // TODO: Fix notification service - temporarily disabled
@@ -217,6 +226,11 @@ router.delete('/like/:targetType/:targetId', authenticateToken, async (req, res)
     const result = await Like.findOneAndDelete({ userId, targetType, targetId });
     if (!result) {
       return res.status(404).json({ error: 'Like not found' });
+    }
+
+    // Decrement likes count for inspiration posts
+    if (targetType === 'inspiration') {
+      await InspirationPost.findByIdAndUpdate(targetId, { $inc: { likesCount: -1 } });
     }
 
     res.json({ message: 'Successfully unliked content' });
@@ -284,7 +298,7 @@ router.post('/save/:targetType/:targetId', authenticateToken, async (req, res) =
     const { targetType, targetId } = req.params;
     
     // Validate target type
-    if (!['design', 'portfolio'].includes(targetType)) {
+    if (!['design', 'portfolio', 'inspiration'].includes(targetType)) {
       return res.status(400).json({ error: 'Invalid target type' });
     }
 
@@ -292,6 +306,8 @@ router.post('/save/:targetType/:targetId', authenticateToken, async (req, res) =
     let content;
     if (targetType === 'portfolio') {
       content = await PortfolioItem.findById(targetId);
+    } else if (targetType === 'inspiration') {
+      content = await InspirationPost.findById(targetId);
     } else {
       return res.status(501).json({ error: 'Design saves not yet implemented' });
     }
@@ -310,8 +326,16 @@ router.post('/save/:targetType/:targetId', authenticateToken, async (req, res) =
     const save = new Save({ userId, targetType, targetId });
     await save.save();
 
+    // Increment saves count for inspiration posts
+    if (targetType === 'inspiration') {
+      await InspirationPost.findByIdAndUpdate(targetId, { $inc: { savesCount: 1 } });
+    }
+
     res.status(201).json({ message: 'Successfully saved content' });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'Already saved' });
+    }
     console.error('Save error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -326,6 +350,11 @@ router.delete('/save/:targetType/:targetId', authenticateToken, async (req, res)
     const result = await Save.findOneAndDelete({ userId, targetType, targetId });
     if (!result) {
       return res.status(404).json({ error: 'Save not found' });
+    }
+
+    // Decrement saves count for inspiration posts
+    if (targetType === 'inspiration') {
+      await InspirationPost.findByIdAndUpdate(targetId, { $inc: { savesCount: -1 } });
     }
 
     res.json({ message: 'Successfully unsaved content' });
@@ -359,6 +388,8 @@ router.get('/saved', authenticateToken, async (req, res) => {
     const contentPromises = saves.map(async (save) => {
       if (save.targetType === 'portfolio') {
         return await PortfolioItem.findById(save.targetId);
+      } else if (save.targetType === 'inspiration') {
+        return await InspirationPost.findById(save.targetId);
       }
       return null;
     });
@@ -405,7 +436,7 @@ router.post('/share/:targetType/:targetId', authenticateToken, async (req, res) 
     const { shareMethod = 'link', platform = 'other' } = req.body;
     
     // Validate target type
-    if (!['design', 'portfolio'].includes(targetType)) {
+    if (!['design', 'portfolio', 'inspiration'].includes(targetType)) {
       return res.status(400).json({ error: 'Invalid target type' });
     }
 
@@ -413,6 +444,8 @@ router.post('/share/:targetType/:targetId', authenticateToken, async (req, res) 
     let content;
     if (targetType === 'portfolio') {
       content = await PortfolioItem.findById(targetId);
+    } else if (targetType === 'inspiration') {
+      content = await InspirationPost.findById(targetId);
     } else {
       return res.status(501).json({ error: 'Design shares not yet implemented' });
     }
@@ -466,6 +499,38 @@ router.get('/shares/:targetType/:targetId', async (req, res) => {
     res.json(stats);
   } catch (error) {
     console.error('Get shares error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ===== REPORT SYSTEM =====
+
+// Report content or user
+router.post('/report', authenticateToken, async (req, res) => {
+  try {
+    const reporterId = req.user.userId;
+    const { targetType, targetId, reason, details } = req.body;
+
+    if (!['portfolio', 'inspiration', 'user', 'comment'].includes(targetType)) {
+      return res.status(400).json({ error: 'Invalid target type' });
+    }
+
+    const report = new Report({
+      reporterId,
+      targetType,
+      targetId,
+      reason,
+      details
+    });
+
+    await report.save();
+
+    res.status(201).json({
+      message: 'Report submitted successfully',
+      reportId: report._id
+    });
+  } catch (error) {
+    console.error('Report submission error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
