@@ -19,7 +19,7 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB limit
@@ -30,7 +30,7 @@ const upload = multer({
 const geminiApiKey = process.env.GEMINI_API_KEY;
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 const GEMINI_API_BASE_URL = process.env.GEMINI_API_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/models';
-const GEMINI_MODEL = 'gemini-1.5-flash-latest';
+const GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_ENDPOINT = `${GEMINI_API_BASE_URL}/${GEMINI_MODEL}:generateContent`;
 
 // Defer env check so dotenv/.env.local has time to inject variables
@@ -50,13 +50,13 @@ router.post('/upload-image', upload.single('image'), async (req, res) => {
   try {
     // Use mock userId for now since we removed authentication from upload endpoint
     const userId = '507f1f77bcf86cd799439011';
-    
+
     if (!req.file) {
       return res.status(400).json({ error: 'No image file provided' });
     }
 
     const imageFile = req.file;
-    
+
     // Validate file type (multer already handles size limits)
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
     if (!allowedTypes.includes(imageFile.mimetype)) {
@@ -65,9 +65,9 @@ router.post('/upload-image', upload.single('image'), async (req, res) => {
 
     // Return the server-accessible URL (multer saves the file with timestamp)
     const imageUrl = `http://localhost:5000/uploads/${imageFile.filename}`;
-    
+
     console.log(`Image uploaded for AI analysis: ${imageFile.filename} (${imageFile.size} bytes)`);
-    
+
     res.json({
       success: true,
       imageUrl,
@@ -86,12 +86,12 @@ router.post('/recommend', authenticateToken, async (req, res) => {
   try {
     // Strict security: ALWAYS use the authenticated user's ID from the JWT token.
     const userId = req.user.userId;
-    const { 
-      imageUrl, 
-      roomType = 'Living Room', 
-      styles = [], 
+    const {
+      imageUrl,
+      roomType = 'Living Room',
+      styles = [],
       budget = '$1,000-$2,500',
-      creativity = 0.7 
+      creativity = 0.7
     } = req.body;
 
     if (!imageUrl) {
@@ -106,10 +106,10 @@ router.post('/recommend', authenticateToken, async (req, res) => {
 
     // Generate recommendations using Gemini API
     const recommendations = await generateDesignRecommendationsWithGemini(
-      features, 
-      styles, 
-      roomType, 
-      budget, 
+      features,
+      styles,
+      roomType,
+      budget,
       creativity,
       similarDesigns
     );
@@ -144,27 +144,27 @@ router.post('/recommend', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('AI recommendation error:', error);
-    
+
     // Check specific error types
     const isRateLimit = error.response?.status === 429;
     const isQuotaExceeded = error.response?.data?.error?.message?.toLowerCase().includes('quota') ||
-                          error.response?.data?.error?.message?.toLowerCase().includes('limit') ||
-                          error.response?.data?.error?.code === 'QUOTA_EXCEEDED';
-    const isAIFailure = error.message?.includes('Gemini') || 
-                       error.message?.includes('AI service') ||
-                       error.code === 'ECONNREFUSED';
-    
+      error.response?.data?.error?.message?.toLowerCase().includes('limit') ||
+      error.response?.data?.error?.code === 'QUOTA_EXCEEDED';
+    const isAIFailure = error.message?.includes('Gemini') ||
+      error.message?.includes('AI service') ||
+      error.code === 'ECONNREFUSED';
+
     if (isRateLimit || isQuotaExceeded) {
       // Specific API limit/quota exceeded handling
       console.log('API quota/limit exceeded, using curated design templates');
-      
-      const isQuotaError = isQuotaExceeded || 
-                          error.response?.data?.error?.message?.toLowerCase().includes('quota');
-      
+
+      const isQuotaError = isQuotaExceeded ||
+        error.response?.data?.error?.message?.toLowerCase().includes('quota');
+
       // Send specific notification about API limits
       await sendNotification(userId, {
         title: isQuotaError ? 'AI Quota Exceeded' : 'AI Rate Limited',
-        message: isQuotaError 
+        message: isQuotaError
           ? 'Our AI service quota has been reached. We\'re using professional design templates while the quota resets.'
           : 'Our AI service is temporarily rate limited. We\'ve provided curated design templates for immediate results.',
         type: 'ai_limit_exceeded',
@@ -175,10 +175,10 @@ router.post('/recommend', authenticateToken, async (req, res) => {
           retryAfter: error.response?.headers?.['retry-after'] || 'unknown'
         }
       });
-      
+
       // Return fallback recommendations with limit information
       const fallbackRecommendations = generateCuratedDesignTemplates(styles, roomType, budget);
-      
+
       res.json({
         recommendations: fallbackRecommendations,
         similarDesigns: [],
@@ -194,11 +194,11 @@ router.post('/recommend', authenticateToken, async (req, res) => {
           retryAfter: error.response?.headers?.['retry-after']
         }
       });
-      
+
     } else if (isAIFailure) {
       // General AI service failure
       console.log('AI service unavailable, using curated design templates');
-      
+
       await sendNotification(userId, {
         title: 'AI Service Unavailable',
         message: 'Our AI service is temporarily unavailable. We\'ve provided you with curated design templates instead.',
@@ -208,9 +208,9 @@ router.post('/recommend', authenticateToken, async (req, res) => {
           originalError: error.message
         }
       });
-      
+
       const fallbackRecommendations = generateCuratedDesignTemplates(styles, roomType, budget);
-      
+
       res.json({
         recommendations: fallbackRecommendations,
         similarDesigns: [],
@@ -226,9 +226,9 @@ router.post('/recommend', authenticateToken, async (req, res) => {
       });
     } else {
       // Regular error
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Failed to generate AI recommendations',
-        details: error.message 
+        details: error.message
       });
     }
   }
@@ -268,10 +268,10 @@ router.get('/recommendations', authenticateToken, async (req, res) => {
 router.post('/modify', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { 
-      recommendationId, 
-      modifications, 
-      creativity = 0.7 
+    const {
+      recommendationId,
+      modifications,
+      creativity = 0.7
     } = req.body;
 
     if (!recommendationId || !modifications) {
@@ -364,7 +364,7 @@ async function getImageBase64(imageUrl) {
       console.warn('Blob URL detected - falling back to text-based analysis');
       throw new Error('BLOB_URL_NOT_SUPPORTED');
     }
-    
+
     const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
     const base64 = Buffer.from(response.data, 'binary').toString('base64');
     return base64;
@@ -381,11 +381,11 @@ async function searchSimilarDesigns(features, styles, roomType) {
   try {
     // Search for portfolio items with similar characteristics
     const query = {};
-    
+
     if (styles.length > 0) {
       query['metadata.style'] = { $in: styles };
     }
-    
+
     if (roomType) {
       query['metadata.roomType'] = roomType;
     }
@@ -458,7 +458,7 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget) {
     const maxRetries = 3;
     let response;
     let useVision = true;
-    
+
     // Try to get image data, fall back to text-only if blob URL
     let imageData = null;
     try {
@@ -471,7 +471,7 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget) {
         throw error; // Re-throw other errors
       }
     }
-    
+
     while (retryCount < maxRetries) {
       try {
         const requestPayload = useVision ? {
@@ -493,14 +493,15 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget) {
             }]
           }]
         };
-        
+
         response = await axios.post(`${GEMINI_ENDPOINT}?key=${key}`, requestPayload);
         break; // Success, exit retry loop
       } catch (error) {
-        if (error.response?.status === 429) {
+        const status = error.response?.status;
+        if (status === 429 || status >= 500) {
           retryCount++;
           if (retryCount >= maxRetries) {
-            console.error('Gemini API rate limit exceeded during image analysis, using fallback');
+            console.error(`Gemini API error (Status: ${status}) exceeded max retries during image analysis, using fallback`);
             return {
               actualRoomType: roomType,
               requestedRoomType: roomType,
@@ -514,8 +515,8 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget) {
               architecturalFeatures: [],
               lighting: [],
               currentMood: 'contemporary',
-              keyObservations: ['Rate limit exceeded - using fallback'],
-              recommendationNotes: 'Using fallback analysis due to rate limit',
+              keyObservations: [`API Error ${status} - using fallback`],
+              recommendationNotes: `Using fallback analysis due to API error ${status}`,
               // Legacy compatibility
               style: styles[0] || 'Modern',
               keyFeatures: ['minimalist', 'clean lines'],
@@ -524,21 +525,21 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget) {
           }
           // Exponential backoff: 1s, 2s, 4s
           const delay = Math.pow(2, retryCount - 1) * 1000;
-          console.log(`Gemini API rate limited during image analysis, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+          console.log(`Gemini API error (Status: ${status}) during image analysis, retry ${retryCount}/${maxRetries} after ${delay}ms`);
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
-          throw error; // Re-throw non-rate-limit errors
+          throw error;
         }
       }
     }
 
     let text = response.data.candidates[0].content.parts[0].text;
     text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    
+
     // Try to parse JSON, if fails, return mock data
     try {
       const analysis = JSON.parse(text);
-      
+
       // Validate and ensure required fields
       return {
         actualRoomType: analysis.actualRoomType || roomType,
@@ -653,7 +654,7 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
     let retryCount = 0;
     const maxRetries = 3;
     let response;
-    
+
     while (retryCount < maxRetries) {
       try {
         response = await axios.post(
@@ -668,25 +669,26 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
         );
         break; // Success, exit retry loop
       } catch (error) {
-        if (error.response?.status === 429) {
+        const status = error.response?.status;
+        if (status === 429 || status >= 500) {
           retryCount++;
           if (retryCount >= maxRetries) {
-            console.error('Gemini API rate limit exceeded during recommendations, using fallback');
+            console.error(`Gemini API error (Status: ${status}) exceeded max retries during recommendations, using fallback`);
             return generateMockRecommendations(styles, roomType, budget);
           }
           // Exponential backoff: 1s, 2s, 4s
           const delay = Math.pow(2, retryCount - 1) * 1000;
-          console.log(`Gemini API rate limited during recommendations, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+          console.log(`Gemini API error (Status: ${status}) during recommendations, retry ${retryCount}/${maxRetries} after ${delay}ms`);
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
-          throw error; // Re-throw non-rate-limit errors
+          throw error; // Re-throw non-rate-limit/non-server errors
         }
       }
     }
 
     let text = response.data.candidates[0].content.parts[0].text;
     text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    
+
     // Try to parse JSON, if fails, return mock recommendations
     let recommendations;
     try {
@@ -695,7 +697,7 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
       console.warn('Gemini returned non-JSON response for recommendations, using mock data:', text.substring(0, 100));
       return generateMockRecommendations(styles, roomType, budget);
     }
-    
+
     // Ensure we have 4 recommendations
     if (recommendations.length < 4) {
       return generateMockRecommendations(styles, roomType, budget);
@@ -712,56 +714,23 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
 
 // Assign contextual images to recommendations that have no image
 function assignRecommendationImages(recommendations, roomType) {
-  return recommendations.map((rec) => ({
+  return recommendations.map((rec, index) => ({
     ...rec,
     imageUrl: rec.imageUrl && rec.imageUrl.startsWith('http')
       ? rec.imageUrl
-      : getInteriorImageUrl(rec.style || '', roomType)
+      : getInteriorImageUrl(rec.style || '', roomType, index, rec.name || 'interior design')
   }));
 }
 
-// Build a keyword-based image URL for a given style + room type.
-// Uses loremflickr.com — free, no API key, supports keyword search,
-// and the `lock` value keeps the image stable across page refreshes.
-function getInteriorImageUrl(style, roomType) {
-  const styleMap = {
-    'Modern': 'modern',
-    'Scandinavian': 'scandinavian',
-    'Contemporary': 'contemporary',
-    'Industrial': 'industrial',
-    'Bohemian': 'bohemian',
-    'Mid-Century': 'mid-century-modern',
-    'Traditional': 'traditional',
-    'Minimalist': 'minimalist',
-    'Farmhouse': 'farmhouse',
-    'Transitional': 'transitional',
-    'Luxury': 'luxury',
-  };
+function getInteriorImageUrl(style, roomType, index = 0, name = '') {
+  const prompt = `Highly detailed, photorealistic interior design of a ${roomType}. Style: ${style}. Concept: ${name}. Beautiful lighting, architectural photography, 8k resolution.`;
+  const encodedPrompt = encodeURIComponent(prompt);
 
-  const roomMap = {
-    'Living Room': 'living-room',
-    'Bedroom': 'bedroom',
-    'Kitchen': 'kitchen',
-    'Bathroom': 'bathroom',
-    'Dining Room': 'dining-room',
-    'Home Office': 'home-office',
-    'Nursery': 'nursery',
-    'Outdoor': 'outdoor-patio',
-  };
+  // We include the index in the seed to guarantee that 4 simultaneous requests 
+  // get 4 completely distinct images, avoiding the "identical images" problem.
+  const seed = Math.floor(Math.random() * 1000000) + index;
 
-  const styleSlug = styleMap[style] || 'interior-design';
-  const roomSlug = roomMap[roomType] || 'interior';
-
-  // Simple deterministic hash so the same style+room always returns
-  // the same image (loremflickr `lock` param pins the random seed).
-  const hashInput = `${styleSlug}-${roomSlug}`;
-  let lock = 0;
-  for (let i = 0; i < hashInput.length; i++) {
-    lock = (lock * 31 + hashInput.charCodeAt(i)) & 0xffff;
-  }
-
-  // loremflickr: free, no API key, keyword-aware image service
-  return `https://loremflickr.com/600/400/${styleSlug},${roomSlug},interior?lock=${lock}`;
+  return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=533&nologo=true&seed=${seed}`;
 }
 
 async function applyDesignModifications(originalRecommendation, modifications, creativity) {
@@ -795,13 +764,13 @@ async function analyzeImageStyle(features) {
 async function saveUserRecommendations(userId, recommendations, imageUrl, metadata, similarDesigns) {
   try {
     const { AIRecommendation } = await import('../models/AIRecommendation.js');
-    
+
     // Generate a unique session ID for this generation
     const sessionId = `session-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    
+
     // Normalize userId to ensure consistency
     const normalizedUserId = userId.toString();
-    
+
     // Save the complete AI recommendation session
     const aiRecommendation = new AIRecommendation({
       userId: normalizedUserId,
@@ -834,7 +803,7 @@ async function saveUserRecommendations(userId, recommendations, imageUrl, metada
       })),
       similarDesigns: similarDesigns || []
     });
-    
+
     await aiRecommendation.save();
     console.log(`✅ Saved ${recommendations.length} recommendations for user ${userId} with session ID: ${sessionId}`);
     console.log(`Session details:`, {
@@ -854,16 +823,16 @@ async function saveUserRecommendations(userId, recommendations, imageUrl, metada
 async function getUserRecommendations(userId, skip = 0, limit = 10) {
   try {
     const { AIRecommendation } = await import('../models/AIRecommendation.js');
-    
-    const recommendations = await AIRecommendation.find({ 
-      userId, 
-      status: 'active' 
+
+    const recommendations = await AIRecommendation.find({
+      userId,
+      status: 'active'
     })
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .lean();
-    
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
     return recommendations;
   } catch (error) {
     console.error('Failed to get user recommendations:', error);
@@ -1022,21 +991,21 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
 
   // Return templates for the requested room type, or default to Living Room
   const roomTemplates = templates[roomType] || templates['Living Room'];
-  
+
   // Filter by user's preferred styles if specified
   if (styles && styles.length > 0) {
-    const filtered = roomTemplates.filter(template => 
-      styles.some(style => 
+    const filtered = roomTemplates.filter(template =>
+      styles.some(style =>
         template.style.toLowerCase().includes(style.toLowerCase())
       )
     );
-    
+
     // If filtered results are too few, return all templates
     if (filtered.length >= 2) {
       return filtered.slice(0, 4);
     }
   }
-  
+
   return roomTemplates.slice(0, 4);
 }
 
@@ -1104,10 +1073,10 @@ router.get('/saved', authenticateToken, async (req, res) => {
     // Strict security: use authenticated user from token
     const userId = req.user.userId;
     const { page = 1, limit = 10 } = req.query;
-    
+
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const recommendations = await getUserRecommendations(userId, skip, parseInt(limit));
-    
+
     res.json({
       recommendations,
       pagination: {
@@ -1127,22 +1096,22 @@ router.get('/saved/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
     const { userId } = req.query;
-    
+
     if (!sessionId || !userId) {
       return res.status(400).json({ error: 'sessionId and userId are required' });
     }
-    
+
     // Normalize userId for consistency
     const normalizedUserId = userId.toString();
-    
+
     const { AIRecommendation } = await import('../models/AIRecommendation.js');
-    
+
     console.log(`Looking for AI recommendation:`, { sessionId, userId: normalizedUserId });
-    
+
     // First check if any session exists with this ID
     const anySession = await AIRecommendation.findOne({ sessionId }).lean();
     console.log(`Any session found:`, !!anySession);
-    
+
     if (anySession) {
       console.log(`Session details:`, {
         sessionId: anySession.sessionId,
@@ -1151,26 +1120,26 @@ router.get('/saved/:sessionId', async (req, res) => {
         createdAt: anySession.createdAt
       });
     }
-    
+
     // Check for specific user and status
-    let recommendation = await AIRecommendation.findOne({ 
-      sessionId, 
-      userId: normalizedUserId, 
-      status: 'active' 
+    let recommendation = await AIRecommendation.findOne({
+      sessionId,
+      userId: normalizedUserId,
+      status: 'active'
     }).lean();
-    
+
     console.log(`Specific recommendation found:`, !!recommendation);
-    
+
     if (!recommendation) {
       // Try without status filter - maybe status is different
       console.log(`Trying without status filter...`);
-      recommendation = await AIRecommendation.findOne({ 
-        sessionId, 
+      recommendation = await AIRecommendation.findOne({
+        sessionId,
         userId: normalizedUserId
       }).lean();
-      
+
       console.log(`Found without status filter:`, !!recommendation);
-      
+
       if (recommendation) {
         console.log(`Session status:`, recommendation.status);
         // Update status to active if it's not already
@@ -1183,12 +1152,12 @@ router.get('/saved/:sessionId', async (req, res) => {
         }
       }
     }
-    
+
     if (!recommendation) {
       // Try to find any session with this ID (userId mismatch case)
       console.log(`Trying any session with this ID...`);
       const anySession = await AIRecommendation.findOne({ sessionId }).lean();
-      
+
       if (anySession) {
         console.log(`Found session but different userId:`, {
           expectedUserId: userId,
@@ -1196,34 +1165,34 @@ router.get('/saved/:sessionId', async (req, res) => {
           sessionId: anySession.sessionId,
           status: anySession.status
         });
-        
+
         // Update the session to use the correct userId (fix the mismatch)
         await AIRecommendation.updateOne(
           { sessionId },
           { userId: normalizedUserId }
         );
-        
+
         console.log(`✅ Updated session userId from ${anySession.userId.toString()} to ${normalizedUserId}`);
-        
+
         // Now get the updated session
         recommendation = await AIRecommendation.findOne({ sessionId }).lean();
       }
     }
-    
+
     if (!recommendation) {
       // Try to find any session for this user to help debugging
       const userSessions = await AIRecommendation.find({ userId: normalizedUserId }).lean();
-      console.log(`User has ${userSessions.length} total sessions:`, 
+      console.log(`User has ${userSessions.length} total sessions:`,
         userSessions.map(s => ({ sessionId: s.sessionId, status: s.status }))
       );
-      
-      return res.status(404).json({ 
+
+      return res.status(404).json({
         error: 'Recommendation not found',
         details: `Session ${sessionId} not found for user ${normalizedUserId} with active status`,
         availableSessions: userSessions.map(s => ({ sessionId: s.sessionId, status: s.status }))
       });
     }
-    
+
     res.json(recommendation);
   } catch (error) {
     console.error('Get recommendation by ID error:', error);
