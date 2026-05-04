@@ -293,23 +293,44 @@ router.put('/:requestId/assign', authenticateToken, async (req, res) => {
         type: 'new_request'
       });
     } else if (userRole === 'designer') {
-      // Designer accepting a request
+      // Designer expressing interest — add to applicants list.
+      // The request stays open (Pending, no designerId) until the homeowner picks someone.
+
       if (designerId && designerId !== userId) {
-        return res.status(403).json({ error: 'Designers can only assign themselves' });
+        return res.status(403).json({ error: 'Designers can only apply for themselves' });
       }
+
+      // Prevent duplicate applications
+      const alreadyApplied = request.applicants.some(
+        a => a.designerId.toString() === userId
+      );
+      if (alreadyApplied) {
+        return res.status(409).json({ error: 'You have already applied to this request' });
+      }
+
+      // Cannot apply to a request that is already assigned
       if (request.designerId) {
         return res.status(400).json({ error: 'This request has already been assigned to a designer' });
       }
 
-      request.designerId = userId; // Assign self
-      request.status = 'In-Progress';
+      const { note } = req.body;
+      request.applicants.push({
+        designerId: userId,
+        note: note || '',
+        appliedAt: new Date()
+      });
       await request.save();
 
-      // Send notification to homeowner
+      // Notify homeowner that a new designer is interested
       await sendNotification(request.homeownerId, {
-        title: 'Request Accepted',
-        message: 'A designer has accepted your custom request',
-        type: 'request_update'
+        title: 'New Application',
+        message: 'A designer has applied to your custom request. Review applicants to choose one.',
+        type: 'new_request'
+      });
+
+      return res.json({
+        message: 'Application submitted successfully',
+        applicantCount: request.applicants.length
       });
     } else {
       return res.status(403).json({ error: 'Access denied' });
@@ -320,6 +341,35 @@ router.put('/:requestId/assign', authenticateToken, async (req, res) => {
     res.json({ request });
   } catch (error) {
     console.error('Assign designer error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get applicants for a specific request (homeowner only)
+router.get('/:requestId/applicants', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+    const { requestId } = req.params;
+
+    if (userRole !== 'homeowner') {
+      return res.status(403).json({ error: 'Only homeowners can view applicants' });
+    }
+
+    const request = await CustomRequest.findById(requestId)
+      .populate('applicants.designerId', 'profile.firstName profile.lastName profile.company profile.profilePicture profile.avatarUrl is_verified');
+
+    if (!request) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+
+    if (request.homeownerId.toString() !== userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    res.json({ applicants: request.applicants });
+  } catch (error) {
+    console.error('Get applicants error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

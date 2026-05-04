@@ -330,6 +330,52 @@ router.get('/designers', async (req, res) => {
   }
 });
 
+// Get a single designer by ID (full profile)
+router.get('/designers/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const pipeline = [
+      { $match: { _id: new (await import('mongoose')).default.Types.ObjectId(id), role: 'designer' } },
+      {
+        $lookup: {
+          from: 'portfolioitems',
+          localField: '_id',
+          foreignField: 'designerId',
+          as: 'portfolio'
+        }
+      },
+      {
+        $lookup: {
+          from: 'follows',
+          localField: '_id',
+          foreignField: 'followingId',
+          as: 'followers'
+        }
+      },
+      {
+        $addFields: {
+          projectCount: { $size: '$portfolio' },
+          followerCount: { $size: '$followers' },
+          averageRating: { $avg: '$portfolio.rating' }
+        }
+      },
+      { $project: { passwordHash: 0, email: 0 } }
+    ];
+
+    const [designer] = await User.aggregate(pipeline);
+
+    if (!designer) {
+      return res.status(404).json({ error: 'Designer not found' });
+    }
+
+    res.json({ designer });
+  } catch (error) {
+    console.error('Get designer error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Combined search (search both designs and designers)
 router.get('/combined', async (req, res) => {
   try {

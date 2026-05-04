@@ -1,46 +1,53 @@
 import mongoose from 'mongoose';
 
 const customRequestSchema = new mongoose.Schema({
-  homeownerId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true 
+  homeownerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   },
-  designerId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    ref: 'User' 
+  designerId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
-  title: { 
-    type: String, 
+  title: {
+    type: String,
     required: true,
     maxlength: 200
   },
-  description: { 
-    type: String, 
+  description: {
+    type: String,
     required: true,
     maxlength: 2000
   },
-  roomType: { 
-    type: String, 
+  roomType: {
+    type: String,
     required: true,
-    enum: ['Living Room', 'Bedroom', 'Kitchen', 'Dining Room', 'Bathroom', 'Office', 'Outdoor', 'Other']
+    enum: ['Living Room', 'Bedroom', 'Kitchen', 'Dining Room', 'Bathroom', 'Office', 'Home Office', 'Outdoor', 'Other']
   },
-  budget: { 
-    type: Number, 
+  budget: {
+    type: Number,
     required: true,
     min: 0
   },
-  currency: { 
-    type: String, 
+  currency: {
+    type: String,
     default: 'ETB'
   },
-  urgency: { 
-    type: String, 
-    enum: ['Low', 'Normal', 'High'],
+  urgency: {
+    type: String,
+    enum: ['Low', 'Normal', 'High', 'Urgent'],
     default: 'Normal'
   },
-  status: { 
-    type: String, 
+  // Designers who have expressed interest in this public request.
+  // The request stays 'Pending' / designerId=null until the homeowner picks one.
+  applicants: [{
+    designerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    note: { type: String, maxlength: 500, default: '' },
+    appliedAt: { type: Date, default: Date.now }
+  }],
+  status: {
+    type: String,
     enum: ['Pending', 'In-Progress', 'Review', 'Completed', 'Cancelled'],
     default: 'Pending'
   },
@@ -64,18 +71,18 @@ const customRequestSchema = new mongoose.Schema({
     }]
   },
   messages: [{
-    sender: { 
-      type: String, 
+    sender: {
+      type: String,
       enum: ['homeowner', 'designer', 'system'],
-      required: true 
+      required: true
     },
-    senderId: { 
-      type: mongoose.Schema.Types.ObjectId, 
+    senderId: {
+      type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true 
+      required: true
     },
-    message: { 
-      type: String, 
+    message: {
+      type: String,
       required: true,
       maxlength: 1000
     },
@@ -89,13 +96,13 @@ const customRequestSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
   }],
   escrow: {
-    transactionId: { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: 'Transaction' 
+    transactionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Transaction'
     },
     amount: Number,
-    status: { 
-      type: String, 
+    status: {
+      type: String,
       enum: ['pending', 'held', 'released', 'refunded'],
       default: 'pending'
     },
@@ -115,8 +122,8 @@ const customRequestSchema = new mongoose.Schema({
   },
   tags: [String],
   completedAt: Date
-}, { 
-  timestamps: true 
+}, {
+  timestamps: true
 });
 
 // Indexes for efficient queries
