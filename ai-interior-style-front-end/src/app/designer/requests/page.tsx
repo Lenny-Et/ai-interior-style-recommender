@@ -70,6 +70,9 @@ export default function DesignerRequestsPage() {
   const [message, setMessage] = useState("");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [showAvailable, setShowAvailable] = useState(false);
+  const [appliedSet, setAppliedSet] = useState<Set<string>>(new Set());
+  const [applyNote, setApplyNote] = useState("");
+  const [showNoteFor, setShowNoteFor] = useState<string | null>(null);
 
   useEffect(() => {
     loadRequests();
@@ -102,25 +105,25 @@ export default function DesignerRequestsPage() {
     }
   };
 
-  const acceptRequest = async (requestId: string) => {
+  const applyForRequest = async (requestId: string) => {
     try {
-      console.log('acceptRequest called with requestId:', requestId);
-      
-      // Get the actual logged-in designer's ID from the store
       const { user } = useAppStore.getState();
       if (!user || user.role !== 'designer') {
-        toast.error("Only designers can accept requests");
+        toast.error("Only designers can apply for requests");
         return;
       }
-      
-      console.log('Assigning designer:', user.id, 'to request:', requestId);
-      await apiClient.assignDesignerToRequest(requestId, user.id);
-      toast.success("Request accepted successfully!");
-      loadRequests();
-      loadAvailableRequests();
+      await apiClient.applyToRequest(requestId, applyNote.trim() || undefined);
+      toast.success("Application submitted! The homeowner will review and choose a designer.");
+      setAppliedSet(prev => new Set(prev).add(requestId));
+      setShowNoteFor(null);
+      setApplyNote("");
     } catch (error: any) {
-      console.error('acceptRequest error:', error);
-      toast.error(error.error || error.message || "Failed to accept request");
+      if (error?.status === 409) {
+        toast.error("You have already applied to this request.");
+        setAppliedSet(prev => new Set(prev).add(requestId));
+      } else {
+        toast.error(error.error || error.message || "Failed to apply");
+      }
     }
   };
 
@@ -267,9 +270,30 @@ export default function DesignerRequestsPage() {
                 </div>
                 <div className="flex gap-2">
                   {showAvailable && ticket && ticket.status === "Pending" && (
-                    <Button size="sm" onClick={() => acceptRequest(ticket._id)}>
-                      <CheckCircle className="w-3.5 h-3.5" /> Accept
-                    </Button>
+                    appliedSet.has(ticket._id) ? (
+                      <Badge variant="green"><CheckCircle className="w-3 h-3" /> Applied</Badge>
+                    ) : showNoteFor === ticket._id ? (
+                      <div className="flex flex-col gap-2 w-full">
+                        <textarea
+                          value={applyNote}
+                          onChange={(e) => setApplyNote(e.target.value)}
+                          placeholder="Add a short cover note (optional)…"
+                          rows={2}
+                          maxLength={500}
+                          className="w-full px-3 py-2 text-xs rounded-xl bg-surface border border-surface-border text-white placeholder-text-muted focus:outline-none focus:border-brand-500 resize-none transition-all"
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => { setShowNoteFor(null); setApplyNote(""); }}>Cancel</Button>
+                          <Button size="sm" onClick={() => applyForRequest(ticket._id)}>
+                            <Send className="w-3.5 h-3.5" /> Submit Application
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button size="sm" onClick={() => setShowNoteFor(ticket._id)}>
+                        <CheckCircle className="w-3.5 h-3.5" /> Apply
+                      </Button>
+                    )
                   )}
                   {!showAvailable && ticket && ticket.status === "In-Progress" && (
                     <Button size="sm" onClick={() => updateStatus(ticket._id, "Review")}>

@@ -458,6 +458,17 @@ class ApiClient {
     });
   }
 
+  async applyToRequest(requestId: string, note?: string) {
+    return this.request<{ message: string; applicantCount: number }>(`/custom-requests/${requestId}/assign`, {
+      method: 'PUT',
+      body: JSON.stringify({ note }),
+    });
+  }
+
+  async getRequestApplicants(requestId: string) {
+    return this.request<{ applicants: any[] }>(`/custom-requests/${requestId}/applicants`);
+  }
+
   async getAvailableCustomRequests(page = 1, limit = 20) {
     return this.request(`/custom-requests/available/all?page=${page}&limit=${limit}`);
   }
@@ -485,6 +496,10 @@ class ApiClient {
       });
     }
     return this.request(`/search/designers${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
+  }
+
+  async getDesigner(id: string) {
+    return this.request(`/search/designers/${id}`);
   }
 
   // Payments endpoints

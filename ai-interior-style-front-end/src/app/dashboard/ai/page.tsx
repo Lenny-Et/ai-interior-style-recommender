@@ -545,11 +545,6 @@ export default function AIRecommenderPage() {
 
           {selected && (
             <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-              <Link href="/dashboard/ai-studio">
-                <Button size="lg" className="shadow-glow">
-                  <Sparkles className="w-4 h-4" /> Open in AI Studio
-                </Button>
-              </Link>
               <Link href="/dashboard/designers">
                 <Button variant="ghost" size="lg">
                   Hire a Designer <ArrowRight className="w-4 h-4" />

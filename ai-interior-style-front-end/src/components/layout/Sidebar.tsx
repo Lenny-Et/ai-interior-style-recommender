@@ -11,33 +11,33 @@ import { usePathname, useRouter } from "next/navigation";
 
 const navByRole = {
   homeowner: [
-    { label: "Dashboard",       href: "/dashboard",              icon: LayoutDashboard },
-    { label: "AI Recommender",  href: "/dashboard/ai",           icon: Sparkles },
-    { label: "My Designs",      href: "/dashboard/my-designs",    icon: Star },
-    { label: "Discover Feed",   href: "/dashboard/feed",         icon: Images },
-    { label: "Style Boards",    href: "/dashboard/boards",       icon: Heart },
-    { label: "Designer Search", href: "/dashboard/designers",    icon: Users },
-    { label: "AI Studio",       href: "/dashboard/ai-studio",    icon: MessageSquare },
-    { label: "Custom Requests", href: "/dashboard/requests",     icon: ShoppingBag },
-    { label: "Payments",        href: "/dashboard/payments",     icon: CreditCard },
-    { label: "Settings",        href: "/dashboard/settings",     icon: Settings },
+    { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { label: "AI Recommender", href: "/dashboard/ai", icon: Sparkles },
+    { label: "My Designs", href: "/dashboard/my-designs", icon: Star },
+    { label: "Discover Feed", href: "/dashboard/feed", icon: Images },
+    { label: "Style Boards", href: "/dashboard/boards", icon: Heart },
+    { label: "Designer Search", href: "/dashboard/designers", icon: Users },
+    { label: "Custom Requests", href: "/dashboard/requests", icon: ShoppingBag },
+    { label: "Messages", href: "/dashboard/chat", icon: MessageSquare },
+    { label: "Payments", href: "/dashboard/payments", icon: CreditCard },
+    { label: "Settings", href: "/dashboard/settings", icon: Settings },
   ],
   designer: [
-    { label: "Dashboard",       href: "/designer",               icon: LayoutDashboard },
-    { label: "Portfolio",       href: "/designer/portfolio",     icon: Briefcase },
-    { label: "Requests",        href: "/designer/requests",      icon: Ticket },
-    { label: "Analytics",       href: "/designer/analytics",     icon: BarChart2 },
-    { label: "Earnings",        href: "/designer/earnings",      icon: DollarSign },
-    { label: "Notifications",   href: "/designer/notifications", icon: Bell },
-    { label: "Settings",        href: "/designer/settings",      icon: Settings },
+    { label: "Dashboard", href: "/designer", icon: LayoutDashboard },
+    { label: "Portfolio", href: "/designer/portfolio", icon: Briefcase },
+    { label: "Requests", href: "/designer/requests", icon: Ticket },
+    { label: "Analytics", href: "/designer/analytics", icon: BarChart2 },
+    { label: "Earnings", href: "/designer/earnings", icon: DollarSign },
+    { label: "Notifications", href: "/designer/notifications", icon: Bell },
+    { label: "Settings", href: "/designer/settings", icon: Settings },
   ],
   admin: [
-    { label: "Overview",        href: "/admin",                  icon: LayoutDashboard },
-    { label: "Moderation",      href: "/admin/moderation",       icon: Shield },
-    { label: "Users",           href: "/admin/users",            icon: UserCheck },
-    { label: "Transactions",    href: "/admin/transactions",     icon: DollarSign },
-    { label: "Analytics",       href: "/admin/analytics",        icon: BarChart2 },
-    { label: "Configuration",   href: "/admin/config",           icon: Settings },
+    { label: "Overview", href: "/admin", icon: LayoutDashboard },
+    { label: "Moderation", href: "/admin/moderation", icon: Shield },
+    { label: "Users", href: "/admin/users", icon: UserCheck },
+    { label: "Transactions", href: "/admin/transactions", icon: DollarSign },
+    { label: "Analytics", href: "/admin/analytics", icon: BarChart2 },
+    { label: "Configuration", href: "/admin/config", icon: Settings },
   ],
   guest: [],
 };
@@ -81,7 +81,7 @@ export default function Sidebar() {
 
       {/* Bottom: user + logout */}
       <div className="p-3 border-t border-surface-border">
-        <button 
+        <button
           onClick={() => {
             logout();
             router.push('/login');

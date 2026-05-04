@@ -160,17 +160,28 @@ export default function DesignerDashboard() {
     <div className="max-w-7xl mx-auto space-y-8">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Avatar src="https://images.unsplash.com/photo-1494790108755-2616b612b47c?w=120&h=120&fit=crop" name="Sara Mitchell" size="xl" verified />
+          <Avatar 
+            src={user?.profile?.avatarUrl || ""} 
+            name={`${user?.profile?.firstName || 'Designer'} ${user?.profile?.lastName || ''}`.trim()} 
+            size="xl" 
+            verified={user?.is_verified} 
+          />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-display text-2xl font-bold text-white">Sara Mitchell</h1>
-              <Badge variant="brand"><CheckCircle className="w-3 h-3" /> Verified Pro</Badge>
+              <h1 className="font-display text-2xl font-bold text-white">
+                {`${user?.profile?.firstName || 'Designer'} ${user?.profile?.lastName || ''}`.trim()}
+              </h1>
+              {user?.is_verified && <Badge variant="brand"><CheckCircle className="w-3 h-3" /> Verified Pro</Badge>}
             </div>
-            <p className="text-text-muted text-sm">Minimalist · Coastal · New York, NY</p>
+            <p className="text-text-muted text-sm">
+              {user?.profile?.company || 'Independent Designer'}
+            </p>
             <div className="flex items-center gap-1 mt-1 text-sm">
               <Star className="w-4 h-4 text-gold-400 fill-gold-400" />
-              <span className="text-white font-semibold">4.9</span>
-              <span className="text-text-muted">(142 reviews)</span>
+              <span className="text-white font-semibold">
+                {stats.averageRating > 0 ? stats.averageRating.toFixed(1) : 'New'}
+              </span>
+              <span className="text-text-muted">({stats.reviewCount} reviews)</span>
             </div>
           </div>
         </div>
@@ -283,17 +294,9 @@ export default function DesignerDashboard() {
                 </div>
               ))
             ) : (
-              // Fallback to placeholder images when no portfolio items
-              [
-                "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=200&h=200&fit=crop",
-                "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=200&h=200&fit=crop",
-                "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=200&h=200&fit=crop",
-                "https://images.unsplash.com/photo-1631679706909-1844bbd07221?w=200&h=200&fit=crop",
-                "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=200&h=200&fit=crop",
-                "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=200&h=200&fit=crop",
-              ].map((src, i) => (
-                <img key={i} src={src} alt="" className="w-full h-24 object-cover rounded-lg hover:opacity-80 transition-opacity cursor-pointer" />
-              ))
+              <div className="col-span-3 py-8 text-center text-text-muted bg-surface-hover rounded-xl border border-dashed border-surface-border">
+                <p className="text-xs">No portfolio items yet.</p>
+              </div>
             )}
           </div>
         </Card>

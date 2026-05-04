@@ -9,13 +9,20 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 import { apiClient } from "@/lib/api-client";
 import toast from "react-hot-toast";
 
+interface User {
+  _id: string;
+  profile?: {
+    firstName?: string;
+    lastName?: string;
+  };
+  email: string;
+}
+
 interface Transaction {
   id: string;
   date: string;
-  buyer: string;
-  buyerEmail: string;
-  seller: string;
-  sellerEmail: string;
+  buyer: User;
+  seller: User;
   amount: number;
   commission: number;
   designerPayout: number;
@@ -149,8 +156,8 @@ export default function TransactionsPage() {
         ...transactions.map(tx => [
           tx.id,
           new Date(tx.date).toLocaleDateString(),
-          `"${tx.buyer}"`,
-          `"${tx.seller}"`,
+          `"${getUserName(tx.buyer)}"`,
+          `"${getUserName(tx.seller)}"`,
           tx.amount.toString(),
           tx.commission.toString(),
           STATUS_LABELS[tx.status] || tx.status,
@@ -186,6 +193,14 @@ export default function TransactionsPage() {
 
   const handlePageChange = (page: number) => {
     setPagination(prev => ({ ...prev, page }));
+  };
+
+  // Helper function to extract user name from user object
+  const getUserName = (user: User): string => {
+    if (user.profile?.firstName || user.profile?.lastName) {
+      return `${user.profile.firstName || ''} ${user.profile.lastName || ''}`.trim();
+    }
+    return user.email;
   };
 
   if (loading && transactions.length === 0) {
@@ -336,8 +351,8 @@ export default function TransactionsPage() {
                   <td className="font-mono text-xs">{t.id}</td>
                   <td className="text-xs text-text-muted">{formatDate(t.date)}</td>
                   <td>
-                    <p className="text-xs text-purple-100">{t.buyer}</p>
-                    <p className="text-[10px] text-text-muted">→ {t.seller}</p>
+                    <p className="text-xs text-purple-100">{getUserName(t.buyer)}</p>
+                    <p className="text-[10px] text-text-muted">→ {getUserName(t.seller)}</p>
                   </td>
                   <td><span className="font-mono text-[10px] text-text-muted">{t.chapaId}</span></td>
                   <td className="text-right font-semibold text-sm">${t.amount.toLocaleString()}</td>

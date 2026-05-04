@@ -4,6 +4,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
+import Link from "next/link";
 import {
   Plus, Clock, CheckCircle, AlertCircle, Loader2,
   Upload, Eye, MessageCircle, X, Image as ImageIcon,
@@ -64,6 +65,9 @@ export default function RequestsPage() {
   const [loading, setLoading] = useState(true);
   const [activeRequest, setActiveRequest] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [applicants, setApplicants] = useState<any[]>([]);
+  const [applicantsLoading, setApplicantsLoading] = useState(false);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
   const [newRequest, setNewRequest] = useState({
     title: '',
     description: '',
@@ -78,6 +82,21 @@ export default function RequestsPage() {
     loadRequests();
     checkPaymentVerification();
   }, []);
+
+  // Load applicants whenever the selected request changes and it's Pending with no designer
+  useEffect(() => {
+    if (!activeRequest) { setApplicants([]); return; }
+    const req = requests.find(r => r._id === activeRequest);
+    if (!req || req.designerId || req.status !== 'Pending') { setApplicants([]); return; }
+    (async () => {
+      try {
+        setApplicantsLoading(true);
+        const res = await apiClient.getRequestApplicants(activeRequest);
+        setApplicants((res as any).applicants || []);
+      } catch { setApplicants([]); }
+      finally { setApplicantsLoading(false); }
+    })();
+  }, [activeRequest, requests]);
 
   const checkPaymentVerification = async () => {
     // Check URL parameters for payment verification
@@ -240,6 +259,20 @@ export default function RequestsPage() {
     }
   };
 
+  const selectDesigner = async (requestId: string, designerId: string) => {
+    try {
+      setAssigningId(designerId);
+      await apiClient.assignDesignerToRequest(requestId, designerId);
+      toast.success('Designer selected! The request is now In-Progress.');
+      loadRequests();
+      setApplicants([]);
+    } catch (err: any) {
+      toast.error(err?.error || 'Failed to assign designer');
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
   const request = requests.find((r) => r._id === activeRequest);
 
   return (
@@ -284,8 +317,9 @@ export default function RequestsPage() {
         ))}
       </div>
 
-      {/* Requests list */}
-      <div className="space-y-3">
+      <div className="grid lg:grid-cols-[320px_1fr] gap-5">
+        {/* Requests list */}
+        <div className="space-y-3 h-[600px] overflow-y-auto pr-2 custom-scrollbar">
         {loading ? (
           <div className="text-center py-16 text-text-muted">
             <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
@@ -325,6 +359,18 @@ export default function RequestsPage() {
                 </div>
                 <p className="text-xs text-text-muted">{request.roomType} · ${request.budget.toLocaleString()}</p>
                 <p className="text-[10px] text-text-muted mt-1 flex items-center gap-1"><Clock className="w-3 h-3" />Updated {formatDate(request.updatedAt)}</p>
+                {/* Applicant count badge */}
+                {request.status === 'Pending' && !request.designerId && (
+                  (() => {
+                    const req = request as any;
+                    const count = req.applicants?.length ?? 0;
+                    return count > 0 ? (
+                      <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-semibold text-brand-300 bg-brand-600/20 border border-brand-500/30 rounded-full px-2 py-0.5">
+                        {count} designer{count !== 1 ? 's' : ''} applied
+                      </span>
+                    ) : null;
+                  })()
+                )}
               </button>
             );
           })
@@ -370,6 +416,61 @@ export default function RequestsPage() {
                 <p className="font-semibold text-white">{formatDate(request.createdAt)}</p>
               </div>
             </div>
+
+            {/* Applicants panel (Pending + no designer assigned) */}
+            {request.status === 'Pending' && !request.designerId && (
+              <div>
+                <p className="text-xs text-text-muted uppercase tracking-wider mb-3 font-semibold">
+                  Designer Applicants
+                  {applicants.length > 0 && (
+                    <span className="ml-2 text-brand-300">({applicants.length})</span>
+                  )}
+                </p>
+                {applicantsLoading ? (
+                  <div className="flex items-center gap-2 text-text-muted text-xs">
+                    <Loader2 className="w-4 h-4 animate-spin" />Loading applicants…
+                  </div>
+                ) : applicants.length === 0 ? (
+                  <p className="text-xs text-text-muted italic">No designers have applied yet. Your request is visible to all verified designers.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {applicants.map((applicant: any) => {
+                      const d = applicant.designerId;
+                      const dName = `${d?.profile?.firstName ?? ''} ${d?.profile?.lastName ?? ''}`.trim() || d?.profile?.company || 'Unknown';
+                      return (
+                        <div key={applicant._id} className="flex items-start gap-3 p-3 rounded-xl bg-surface border border-surface-border">
+                          <Link href={`/dashboard/designers/${d._id}`} className="hover:opacity-80 transition-opacity">
+                            <Avatar
+                              src={d?.profile?.avatarUrl || d?.profile?.profilePicture}
+                              name={dName}
+                              size="md"
+                              verified={d?.is_verified}
+                            />
+                          </Link>
+                          <div className="flex-1 min-w-0">
+                            <Link href={`/dashboard/designers/${d._id}`} className="hover:text-brand-300 transition-colors">
+                              <p className="text-sm font-semibold text-white hover:text-brand-300 transition-colors">{dName}</p>
+                            </Link>
+                            <p className="text-xs text-text-muted">{d?.profile?.company || 'Independent Designer'}</p>
+                            {applicant.note && (
+                              <p className="text-xs text-purple-200 mt-1 italic">"{applicant.note}"</p>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            onClick={() => selectDesigner(request._id, d._id)}
+                            disabled={assigningId === d._id}
+                          >
+                            {assigningId === d._id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                            Select
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex gap-2">
               {request.status === "Review" && (
@@ -444,6 +545,7 @@ export default function RequestsPage() {
           <p className="text-sm">Select a request to view details</p>
         </div>
       )}
+      </div>
 
       {/* New Request Modal */}
       {showNew && (
