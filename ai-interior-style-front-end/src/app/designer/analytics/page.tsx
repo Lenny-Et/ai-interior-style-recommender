@@ -1,42 +1,69 @@
 "use client";
+import { useState, useEffect } from "react";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
-import { BarChart2, Eye, Heart, Users, TrendingUp, ArrowRight } from "lucide-react";
+import { BarChart2, Eye, Heart, Users, TrendingUp, ArrowRight, Download } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, LineChart, Line, Legend,
 } from "recharts";
+import { apiClient } from "@/lib/api-client";
+import toast from "react-hot-toast";
+import { cn } from "@/lib/utils";
 
-const MONTHLY = [
-  { month: "Oct", views: 820,  saves: 140, followers: 12 },
-  { month: "Nov", views: 1450, saves: 310, followers: 41 },
-  { month: "Dec", views: 1100, saves: 230, followers: 28 },
-  { month: "Jan", views: 2300, saves: 590, followers: 87 },
-  { month: "Feb", views: 1800, saves: 430, followers: 62 },
-  { month: "Mar", views: 3200, saves: 950, followers: 184 },
-  { month: "Apr", views: 3700, saves: 1100,followers: 210 },
-];
-
-const CONVERSION = [
-  { design: "Pure Serenity",   views: 1842, profileVisits: 214, hired: 3 },
-  { design: "Nordic Light",    views: 920,  profileVisits: 88,  hired: 1 },
-  { design: "Coastal Breeze",  views: 1205, profileVisits: 141, hired: 2 },
-];
-
-const TOP_DESIGNS = [
-  { title: "Pure Serenity",  views: 1842, saves: 341, img: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=120&h=80&fit=crop" },
-  { title: "Coastal Breeze", views: 1205, saves: 260, img: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=120&h=80&fit=crop" },
-  { title: "Nordic Light",   views: 920,  saves: 188, img: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=120&h=80&fit=crop" },
-];
+interface AnalyticsData {
+  overview: {
+    totalPortfolioItems: number;
+    totalViews: number;
+    totalLikes: number;
+    totalSaves: number;
+    followerCount: number;
+    completedProjects: number;
+    totalEarnings: number;
+    averageViewsPerItem: number;
+  };
+  monthlyData: Array<{
+    month: string;
+    views: number;
+    likes: number;
+    items: number;
+  }>;
+  topDesigns: Array<{
+    title: string;
+    views: number;
+    imageUrl: string;
+    createdAt: string;
+  }>;
+  recentActivity: {
+    likes: number;
+    saves: number;
+  };
+}
 
 const TOOLTIP_STYLE = { background: "#1a1028", border: "1px solid #2d1f42", borderRadius: "12px", color: "#f3e8ff" };
 
 export default function DesignerAnalyticsPage() {
-  const totalViews    = MONTHLY.reduce((a, m) => a + m.views, 0);
-  const totalSaves    = MONTHLY.reduce((a, m) => a + m.saves, 0);
-  const totalFollowers = MONTHLY.reduce((a, m) => a + m.followers, 0);
-  const convRate = ((CONVERSION.reduce((a, c) => a + c.profileVisits, 0) / totalViews) * 100).toFixed(1);
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('30d');
+
+  useEffect(() => {
+    loadAnalytics();
+  }, [timeRange]);
+
+  const loadAnalytics = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.getDesignerAnalytics(timeRange);
+      const analyticsData = (response as any).data || response;
+      setAnalytics(analyticsData);
+    } catch (error: any) {
+      toast.error(error.error || error.message || "Failed to load analytics");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -48,101 +75,104 @@ export default function DesignerAnalyticsPage() {
           <p className="text-text-muted text-sm">Performance metrics for your portfolio</p>
         </div>
         <div className="flex gap-2">
-          {["7D","30D","90D","All"].map(p => (
-            <button key={p} className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${p === "All" ? "border-brand-500 bg-brand-600/20 text-brand-300" : "border-surface-border text-text-muted hover:border-brand-500/40"}`}>{p}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: "Total Views",      value: totalViews.toLocaleString(),    icon: Eye,        color: "text-blue-400",    bg: "bg-blue-500/10", trend: "+18%" },
-          { label: "Total Saves",      value: totalSaves.toLocaleString(),    icon: Heart,      color: "text-pink-400",    bg: "bg-pink-500/10", trend: "+24%" },
-          { label: "New Followers",    value: totalFollowers.toLocaleString(),icon: Users,      color: "text-violet-400",  bg: "bg-violet-500/10", trend: "+31%" },
-          { label: "Conversion Rate",  value: `${convRate}%`,                 icon: TrendingUp, color: "text-emerald-400", bg: "bg-emerald-500/10", trend: "Profile visits" },
-        ].map(({ label, value, icon: Icon, color, bg, trend }) => (
-          <Card key={label} className="p-5">
-            <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center mb-3`}>
-              <Icon className={`w-4 h-4 ${color}`} />
-            </div>
-            <div className="text-2xl font-bold text-white font-display">{value}</div>
-            <div className="text-xs text-text-muted mt-0.5">{label}</div>
-            <Badge variant="green" className="mt-2 text-[10px]"><TrendingUp className="w-2.5 h-2.5" />{trend}</Badge>
-          </Card>
-        ))}
-      </div>
-
-      {/* Views & saves over time */}
-      <Card>
-        <div className="p-5 border-b border-surface-border">
-          <h2 className="font-semibold text-white">Views, Saves & Follower Growth</h2>
-          <p className="text-xs text-text-muted">Last 7 months</p>
-        </div>
-        <div className="p-4 h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={MONTHLY}>
-              <defs>
-                <linearGradient id="av" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#d946ef" stopOpacity={0.25}/><stop offset="95%" stopColor="#d946ef" stopOpacity={0}/></linearGradient>
-                <linearGradient id="as" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25}/><stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/></linearGradient>
-                <linearGradient id="af" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#06b6d4" stopOpacity={0.25}/><stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/></linearGradient>
-              </defs>
-              <XAxis dataKey="month" tick={{ fill: "#a78bba", fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: "#a78bba", fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
-              <Legend wrapperStyle={{ fontSize: 11, color: "#a78bba" }} />
-              <Area type="monotone" dataKey="views"     stroke="#d946ef" strokeWidth={2} fill="url(#av)" name="Views" />
-              <Area type="monotone" dataKey="saves"     stroke="#f59e0b" strokeWidth={2} fill="url(#as)" name="Saves" />
-              <Area type="monotone" dataKey="followers" stroke="#06b6d4" strokeWidth={2} fill="url(#af)" name="New Followers" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
-
-      <div className="grid md:grid-cols-2 gap-5">
-        {/* Conversion funnel */}
-        <Card>
-          <div className="p-4 border-b border-surface-border">
-            <h2 className="font-semibold text-white">AI → Profile Conversion</h2>
-            <p className="text-xs text-text-muted">How many AI recommendations led to profile visits</p>
-          </div>
-          <div className="p-4 h-52">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={CONVERSION}>
-                <XAxis dataKey="design" tick={{ fill: "#a78bba", fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: "#a78bba", fontSize: 11 }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
-                <Bar dataKey="views"        fill="#7c3aed" radius={[4,4,0,0]} name="Views" />
-                <Bar dataKey="profileVisits" fill="#d946ef" radius={[4,4,0,0]} name="Profile Visits" />
-                <Bar dataKey="hired"        fill="#10b981" radius={[4,4,0,0]} name="Hired" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-
-        {/* Top performing designs */}
-        <Card>
-          <div className="p-4 border-b border-surface-border">
-            <h2 className="font-semibold text-white">Top Performing Designs</h2>
-          </div>
-          <div className="divide-y divide-surface-border">
-            {TOP_DESIGNS.map((d, i) => (
-              <div key={d.title} className="p-4 flex items-center gap-3">
-                <span className="text-lg font-bold text-text-muted w-5 text-center">{i + 1}</span>
-                <img src={d.img} alt={d.title} className="w-16 h-11 object-cover rounded-lg" />
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-white">{d.title}</p>
-                  <div className="flex gap-3 text-xs text-text-muted mt-0.5">
-                    <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{d.views.toLocaleString()}</span>
-                    <span className="flex items-center gap-1"><Heart className="w-3 h-3" />{d.saves}</span>
-                  </div>
-                </div>
-                <Button variant="ghost" size="sm"><ArrowRight className="w-3.5 h-3.5" /></Button>
-              </div>
+          <div className="flex gap-2">
+            {(['7d','30d','90d'] as const).map((range) => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                  timeRange === range
+                    ? "bg-brand-600 text-white shadow-glow-sm"
+                    : "bg-surface-card border border-surface-border text-text-muted hover:border-brand-500/40"
+                )}
+              >
+                {range === '7d' ? '7 days' : range === '30d' ? '30 days' : '90 days'}
+              </button>
             ))}
           </div>
-        </Card>
+          <Button variant="ghost" size="sm"><Download className="w-4 h-4" /> Export</Button>
+        </div>
       </div>
+
+      {/* Overview cards */}
+      {loading ? (
+        <div className="text-center py-16 text-text-muted">
+          <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="font-semibold text-white">Loading analytics...</p>
+        </div>
+      ) : analytics ? (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[
+              { label: "Total Views",    value: analytics.overview.totalViews.toLocaleString(),    icon: Eye,     color: "text-brand-400", bg: "bg-brand-500/10" },
+              { label: "Total Saves",    value: analytics.overview.totalSaves.toLocaleString(),    icon: Heart,    color: "text-pink-400", bg: "bg-pink-500/10" },
+              { label: "Followers",      value: analytics.overview.followerCount.toLocaleString(), icon: Users,    color: "text-emerald-400", bg: "bg-emerald-500/10" },
+              { label: "Portfolio Items", value: analytics.overview.totalPortfolioItems.toString(),    icon: TrendingUp, color: "text-gold-400", bg: "bg-gold-500/10" },
+            ].map(({ label, value, icon: Icon, color, bg }) => (
+              <Card key={label} className="p-5">
+                <div className={`w-9 h-9 rounded-xl ${bg} flex items-center justify-center mb-3`}>
+                  <Icon className={`w-4 h-4 ${color}`} />
+                </div>
+                <div className="text-2xl font-bold text-white font-display">{value}</div>
+                <div className="text-xs text-text-muted mt-0.5">{label}</div>
+              </Card>
+            ))}
+          </div>
+
+          {/* Performance chart */}
+          <Card>
+            <div className="p-5 border-b border-surface-border">
+              <h3 className="font-semibold text-white">Performance Overview</h3>
+            </div>
+            <div className="p-5">
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={analytics.monthlyData}>
+                  <XAxis dataKey="month" stroke="#6b7280" />
+                  <YAxis stroke="#6b7280" />
+                  <Tooltip contentStyle={TOOLTIP_STYLE} />
+                  <Legend />
+                  <Area type="monotone" dataKey="views" stackId="1" stroke="#d946ef" fill="#d946ef" fillOpacity={0.6} />
+                  <Area type="monotone" dataKey="likes" stackId="1" stroke="#10b981" fill="#10b981" fillOpacity={0.6} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          {/* Top designs */}
+          <Card>
+            <div className="p-5 border-b border-surface-border flex items-center justify-between">
+              <h3 className="font-semibold text-white">Top Performing Designs</h3>
+              <Button variant="ghost" size="sm">View All</Button>
+            </div>
+            <div className="p-5 space-y-4">
+              {analytics.topDesigns.map((design, idx) => (
+                <div key={idx} className="flex items-center gap-4">
+                  <span className="text-lg font-bold text-text-muted w-6">{idx + 1}</span>
+                  <img 
+                    src={design.imageUrl || '/placeholder-design.jpg'} 
+                    alt={design.title || 'Design'} 
+                    className="w-16 h-12 rounded-lg object-cover" 
+                  />
+                  <div className="flex-1">
+                    <p className="font-medium text-white">{design.title || 'Untitled Design'}</p>
+                    <p className="text-sm text-text-muted">
+                      {(design.views || 0).toLocaleString()} views
+                    </p>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-text-muted" />
+                </div>
+              ))}
+            </div>
+          </Card>
+        </>
+      ) : (
+        <div className="text-center py-16 text-text-muted">
+          <BarChart2 className="w-12 h-12 mx-auto mb-3 opacity-40" />
+          <p className="font-semibold text-white">No analytics data available</p>
+          <p className="text-sm mt-1">Start adding portfolio items to see your analytics</p>
+        </div>
+      )}
     </div>
   );
 }
