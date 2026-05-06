@@ -26,6 +26,7 @@ import notificationRoutes from './routes/notifications.js';
 import supportRoutes from './routes/support.js';
 import paymentRoutes from './routes/payment.js';
 import userDesignsRoutes from './routes/userDesigns.js';
+import inspirationRoutes from './routes/inspiration.js';
 import { initNotificationService } from './services/notificationService.js';
 import { startExpirationWorker } from './workers/expirationWorker.js';
 
@@ -94,9 +95,20 @@ io.on('connection', (socket) => {
 });
 
 if (process.env.MONGODB_URI) {
-  mongoose.connect(process.env.MONGODB_URI)
+  mongoose.connect(process.env.MONGODB_URI, {
+    serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+    socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+  })
     .then(() => console.log('Connected to MongoDB'))
-    .catch((error) => console.error('MongoDB connection error:', error));
+    .catch((error) => {
+      console.error('MongoDB connection error:', error);
+      console.error('\n--- TROUBLESHOOTING ---');
+      console.error('If you see ETIMEDOUT, please ensure:');
+      console.error('1. Your IP address is whitelisted in MongoDB Atlas (Network Access).');
+      console.error('2. Your database user has the correct permissions.');
+      console.error('3. There are no firewall rules blocking port 27017.');
+      console.error('------------------------\n');
+    });
 } else {
   console.log('Skipping MongoDB connection: MONGODB_URI not provided.');
 }
@@ -118,6 +130,7 @@ app.use('/api/designer/analytics', designerAnalyticsRoutes);
 app.use('/api/admin/analytics', adminAnalyticsRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/user-designs', userDesignsRoutes);
+app.use('/api/inspiration', inspirationRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Auth service running' });

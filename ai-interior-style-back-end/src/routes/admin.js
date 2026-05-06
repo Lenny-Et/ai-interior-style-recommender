@@ -1,9 +1,11 @@
 import express from 'express';
 import { User } from '../models/User.js';
 import { PortfolioItem } from '../models/PortfolioItem.js';
+import { InspirationPost } from '../models/InspirationPost.js';
 import { Transaction } from '../models/Transaction.js';
 import { Like } from '../models/Like.js';
 import { Follow } from '../models/Follow.js';
+import { Report } from '../models/Report.js';
 import { authenticateToken, requireRole } from '../middleware/auth.js';
 import { sendDesignerApprovalEmail, sendDesignerRejectionEmail } from '../services/emailService.js';
 
@@ -137,8 +139,8 @@ router.get('/users/:id', async (req, res) => {
     // Get detailed stats
     const [portfolioItems, followers, following, transactions] = await Promise.all([
       PortfolioItem.find({ designerId: id }).sort({ createdAt: -1 }),
-      Follow.find({ followingId: id }).populate('followerId', 'profile profilePicture'),
-      Follow.find({ followerId: id }).populate('followingId', 'profile profilePicture'),
+      Follow.find({ followingId: id }).populate('followerId', 'profile'),
+      Follow.find({ followerId: id }).populate('followingId', 'profile'),
       Transaction.find({
         $or: [{ homeownerId: id }, { designerId: id }]
       }).sort({ createdAt: -1 })
@@ -325,6 +327,27 @@ router.get('/content/pending', async (req, res) => {
       });
     }
 
+    if (type === 'inspiration') {
+      const inspirationPosts = await InspirationPost.find(query)
+        .populate('userId', 'profile profilePicture')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum);
+
+      const total = await InspirationPost.countDocuments(query);
+
+      return res.json({
+        content: inspirationPosts,
+        contentType: 'inspiration',
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          pages: Math.ceil(total / limitNum)
+        }
+      });
+    }
+
     // Add other content types as needed
     res.json({ content: [], contentType: type || 'all' });
   } catch (error) {
@@ -355,6 +378,23 @@ router.post('/content/:type/:id/approve', async (req, res) => {
       });
     }
 
+    if (type === 'inspiration') {
+      const inspirationPost = await InspirationPost.findByIdAndUpdate(
+        id,
+        { isApproved: true, approvedAt: new Date() },
+        { new: true }
+      );
+
+      if (!inspirationPost) {
+        return res.status(404).json({ error: 'Inspiration post not found' });
+      }
+
+      return res.json({
+        message: 'Content approved successfully',
+        content: inspirationPost
+      });
+    }
+
     res.status(400).json({ error: 'Invalid content type' });
   } catch (error) {
     console.error('Approve content error:', error);
@@ -377,6 +417,18 @@ router.delete('/content/:type/:id', async (req, res) => {
       return res.json({
         message: 'Content removed successfully',
         removedContent: portfolioItem
+      });
+    }
+
+    if (type === 'inspiration') {
+      const inspirationPost = await InspirationPost.findByIdAndDelete(id);
+      if (!inspirationPost) {
+        return res.status(404).json({ error: 'Inspiration post not found' });
+      }
+
+      return res.json({
+        message: 'Content removed successfully',
+        removedContent: inspirationPost
       });
     }
 
@@ -414,6 +466,27 @@ router.post('/content/:type/:id/reject', async (req, res) => {
       });
     }
 
+    if (type === 'inspiration') {
+      const inspirationPost = await InspirationPost.findByIdAndUpdate(
+        id,
+        { 
+          isApproved: false, 
+          rejectedAt: new Date(),
+          rejectionReason: reason || 'Content does not meet quality standards'
+        },
+        { new: true }
+      );
+
+      if (!inspirationPost) {
+        return res.status(404).json({ error: 'Inspiration post not found' });
+      }
+
+      return res.json({
+        message: 'Content rejected successfully',
+        content: inspirationPost
+      });
+    }
+
     res.status(400).json({ error: 'Invalid content type' });
   } catch (error) {
     console.error('Reject content error:', error);
@@ -448,9 +521,107 @@ router.post('/content/:type/:id/request-edit', async (req, res) => {
       });
     }
 
+    if (type === 'inspiration') {
+      const inspirationPost = await InspirationPost.findByIdAndUpdate(
+        id,
+        { 
+          isApproved: false, 
+          editRequestedAt: new Date(),
+          editRequestNote: note || 'Please review and update this content'
+        },
+        { new: true }
+      );
+
+      if (!inspirationPost) {
+        return res.status(404).json({ error: 'Inspiration post not found' });
+      }
+
+      return res.json({
+        message: 'Edit request sent successfully',
+        content: inspirationPost
+      });
+    }
+
     res.status(400).json({ error: 'Invalid content type' });
   } catch (error) {
     console.error('Request edit content error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get moderation history
+router.get('/content/history', async (req, res) => {
+  try {
+    const { page = 1, limit = 20, type, status } = req.query;
+    
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    let query = {};
+
+    if (status === 'approved') {
+      query.isApproved = true;
+    } else if (status === 'rejected') {
+      query.rejectedAt = { $exists: true };
+      query.isApproved = false;
+    } else if (status === 'edit_requested') {
+      query.editRequestedAt = { $exists: true };
+      query.isApproved = false;
+    } else {
+      // Default history: anything that has been touched by a moderator
+      query.$or = [
+        { isApproved: true },
+        { rejectedAt: { $exists: true } },
+        { editRequestedAt: { $exists: true } }
+      ];
+    }
+
+    if (type === 'portfolio') {
+      const items = await PortfolioItem.find(query)
+        .populate('designerId', 'profile email')
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(limitNum);
+
+      const total = await PortfolioItem.countDocuments(query);
+
+      return res.json({
+        content: items,
+        contentType: 'portfolio',
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          pages: Math.ceil(total / limitNum)
+        }
+      });
+    }
+
+    if (type === 'inspiration') {
+      const items = await InspirationPost.find(query)
+        .populate('userId', 'profile email')
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(limitNum);
+
+      const total = await InspirationPost.countDocuments(query);
+
+      return res.json({
+        content: items,
+        contentType: 'inspiration',
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          pages: Math.ceil(total / limitNum)
+        }
+      });
+    }
+
+    res.json({ content: [], contentType: type || 'all' });
+  } catch (error) {
+    console.error('Get content history error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -729,6 +900,102 @@ router.get('/analytics/revenue', async (req, res) => {
     });
   } catch (error) {
     console.error('Revenue analytics error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ===== REPORT MANAGEMENT =====
+
+// Get all reports
+router.get('/reports', async (req, res) => {
+  try {
+    const { page = 1, limit = 20, status = 'pending' } = req.query;
+    
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    const query = status === 'all' ? {} : { status };
+
+    const reports = await Report.find(query)
+      .populate('reporterId', 'profile email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    const total = await Report.countDocuments(query);
+
+    res.json({
+      reports,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum)
+      }
+    });
+  } catch (error) {
+    console.error('Get reports error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Resolve a report
+router.put('/reports/:id/resolve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { note } = req.body;
+
+    const report = await Report.findByIdAndUpdate(
+      id,
+      { 
+        status: 'resolved',
+        resolvedBy: req.user.userId,
+        resolvedAt: new Date(),
+        resolutionNote: note
+      },
+      { new: true }
+    );
+
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    res.json({
+      message: 'Report resolved successfully',
+      report
+    });
+  } catch (error) {
+    console.error('Resolve report error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Dismiss a report
+router.put('/reports/:id/dismiss', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const report = await Report.findByIdAndUpdate(
+      id,
+      { 
+        status: 'dismissed',
+        resolvedBy: req.user.userId,
+        resolvedAt: new Date()
+      },
+      { new: true }
+    );
+
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    res.json({
+      message: 'Report dismissed successfully',
+      report
+    });
+  } catch (error) {
+    console.error('Dismiss report error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

@@ -122,8 +122,8 @@ export const processWebhook = async (chapaPayload) => {
     const tx = await Transaction.findOne({ tx_ref });
     if (!tx) throw new Error('Transaction not found');
 
-    // 10-15% commission calculator
-    const commissionRate = 0.15; // 15%
+    // 12% commission calculator
+    const commissionRate = 0.12; // 12%
     tx.commissionAmount = tx.amount * commissionRate;
     tx.designerPayout = tx.amount - tx.commissionAmount;
     tx.status = 'held_in_escrow';

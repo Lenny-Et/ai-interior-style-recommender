@@ -8,6 +8,9 @@ import { AIRecommendation } from '../models/AIRecommendation.js';
 import { CustomRequest } from '../models/CustomRequest.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { User } from '../models/User.js';
+import { sendNotification } from '../services/notificationService.js';
+
+console.log('Payment route loaded - sendNotification is:', typeof sendNotification);
 
 const router = express.Router();
 
@@ -110,7 +113,9 @@ router.post('/verify', async (req, res) => {
     if (!tx_ref) return res.status(400).json({ error: 'tx_ref is required' });
 
     // Verify with Chapa
+    console.log(`Verifying payment for tx_ref: ${tx_ref}`);
     const verification = await verifyPayment(tx_ref);
+    console.log(`Chapa verification response status: ${verification?.status}, data status: ${verification?.data?.status}`);
 
     if (verification.status === 'success' && verification.data.status === 'success') {
       const tx = await Transaction.findOne({ tx_ref });
@@ -129,13 +134,46 @@ router.post('/verify', async (req, res) => {
         return res.json({ success: true, status: tx.status, message: 'Already verified' });
       }
 
+      const { data } = verification;
+      
       // Process it
-      const commissionRate = 0.15; // 15%
-      tx.commissionAmount = tx.amount * commissionRate;
+      const commissionRate = 0.12; // Standard 12% commission
+      tx.commissionAmount = Math.round(tx.amount * commissionRate);
       tx.designerPayout = tx.amount - tx.commissionAmount;
-      tx.status = 'held_in_escrow';
-      tx.webhookData = verification.data;
+      tx.webhookData = data;
+      
       if (sessionId && !tx.sessionId) tx.sessionId = sessionId; // back-fill if missing
+      const resolvedSessionId = tx.sessionId || sessionId;
+      
+      console.log(`Verify: tx_ref=${tx_ref}, tx.sessionId=${tx.sessionId}, bodySessionId=${bodySessionId}, resolved=${resolvedSessionId}`);
+
+      // If it's a designer service, check if the request was already in "Review" 
+      // which means this payment should release funds immediately
+      let shouldReleaseImmediately = false;
+      if (tx.purchaseType === 'designer_service' && resolvedSessionId) {
+        try {
+          const request = await CustomRequest.findById(resolvedSessionId);
+          if (request && (request.status === 'Review' || request.status === 'Completed')) {
+            shouldReleaseImmediately = true;
+            tx.status = 'released_to_designer';
+            tx.projectStatus = 'completed';
+            console.log(`Immediate release triggered for ${tx_ref} as request ${resolvedSessionId} is in ${request.status} status.`);
+          } else {
+            tx.status = 'held_in_escrow';
+            console.log(`Payment held in escrow for ${tx_ref}. Request status is ${request?.status || 'unknown'}.`);
+          }
+        } catch (err) {
+          console.error('Error checking request status for immediate release:', err);
+          tx.status = 'held_in_escrow';
+        }
+      } else if (tx.purchaseType === 'ai_design' || tx.purchaseType === 'pro_upgrade') {
+        // AI and Pro upgrades are always immediate release
+        tx.status = 'released_to_designer';
+        tx.projectStatus = 'completed';
+      } else {
+        tx.status = 'held_in_escrow';
+      }
+
       await tx.save();
 
       // Grant premium access based on purchase type
@@ -149,10 +187,8 @@ router.post('/verify', async (req, res) => {
           status: 'completed'
         });
         console.log(`Premium AI design access granted for user ${tx.homeownerId}`);
-        if (sessionId) {
-          await savePaidDesignToLibrary(tx, sessionId);
-        } else {
-          console.warn('No sessionId available — cannot save designs to library');
+        if (resolvedSessionId) {
+          await savePaidDesignToLibrary(tx, resolvedSessionId);
         }
       } else if (tx.purchaseType === 'pro_upgrade') {
         const user = await User.findById(tx.homeownerId);
@@ -182,20 +218,46 @@ router.post('/verify', async (req, res) => {
         });
         console.log(`Designer service access granted for user ${tx.homeownerId}`);
         
-        // Update the custom request status to Completed
-        if (sessionId) {
+        // Update the custom request status
+        if (resolvedSessionId) {
           try {
-            await CustomRequest.findByIdAndUpdate(sessionId, { status: 'Completed' });
-            console.log(`CustomRequest ${sessionId} marked as Completed following payment.`);
+            const request = await CustomRequest.findById(resolvedSessionId);
+            if (request && request.status !== 'Completed') {
+              // If it was already in Review, it's now Completed
+              // If it was Pending, it's now In-Progress (escrow started)
+              const newStatus = request.status === 'Review' ? 'Completed' : 'In-Progress';
+              request.status = newStatus;
+              await request.save();
+              console.log(`CustomRequest ${resolvedSessionId} status updated to ${newStatus} following payment.`);
+            }
           } catch (err) {
             console.error('Error updating CustomRequest status:', err);
           }
         }
+
+        // If funds were released, send notification to designer
+        if (shouldReleaseImmediately && tx.designerId && typeof sendNotification === 'function') {
+          try {
+            await sendNotification(tx.designerId, {
+              title: 'Payment Received',
+              message: `Payment of $${tx.designerPayout} has been released to your account for project ${tx_ref}`,
+              type: 'payment_received',
+              metadata: {
+                transactionId: tx._id,
+                amount: tx.designerPayout,
+                tx_ref
+              }
+            });
+          } catch (notifErr) {
+            console.error('Notification failed but payment succeeded:', notifErr);
+          }
+        }
       }
 
-      return res.json({ success: true, status: 'held_in_escrow', transaction: tx });
+      return res.json({ success: true, status: tx.status, transaction: tx });
     } else {
       // Payment failed or is still pending
+      console.warn(`Payment not successful for ${tx_ref}. Chapa status: ${verification?.status}, Data status: ${verification?.data?.status}`);
       return res.status(400).json({ success: false, error: 'Payment not successful', details: verification.data });
     }
   } catch (error) {
@@ -237,8 +299,8 @@ router.post('/webhook', async (req, res) => {
     const result = await processWebhook(req.body);
     
     // If payment was successful and transaction was updated, grant premium access
-    if (result && result.status === 'held_in_escrow') {
-      const { homeownerId, designerId, tx_ref, amount } = result;
+    if (result && (result.status === 'held_in_escrow' || result.status === 'released_to_designer')) {
+      const { homeownerId, designerId, tx_ref, amount, sessionId } = result;
       
       // Determine purchase type and grant access
       if (result.purchaseType === 'ai_design') {
@@ -281,11 +343,16 @@ router.post('/webhook', async (req, res) => {
         });
         console.log(`Designer service access granted for user ${homeownerId}`);
         
-        // Update the custom request status to Completed
-        if (result.sessionId) {
+        // Update the custom request status
+        if (sessionId) {
           try {
-            await CustomRequest.findByIdAndUpdate(result.sessionId, { status: 'Completed' });
-            console.log(`CustomRequest ${result.sessionId} marked as Completed via webhook.`);
+            const request = await CustomRequest.findById(sessionId);
+            if (request && request.status !== 'Completed') {
+              const newStatus = request.status === 'Review' ? 'Completed' : 'In-Progress';
+              request.status = newStatus;
+              await request.save();
+              console.log(`CustomRequest ${sessionId} status updated to ${newStatus} via webhook.`);
+            }
           } catch (err) {
             console.error('Error updating CustomRequest status via webhook:', err);
           }
@@ -422,52 +489,40 @@ router.post('/payment-completed', async (req, res) => {
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
-    // If payment is completed and transaction is in escrow, release funds
-    if (status === 'success' && transaction.status === 'held_in_escrow') {
-      // Calculate commission and designer payout
+    // If payment is completed, handle escrow or release
+    if (status === 'success') {
+      // For designer services, we move to escrow first if it was pending
+      // If it's already in escrow, we might be seeing a duplicate webhook or a final release
+      
       const commissionRate = 0.12; // 12% platform commission
       const commissionAmount = Math.round(transaction.amount * commissionRate);
       const designerPayout = transaction.amount - commissionAmount;
 
-      // Update transaction status and amounts
-      transaction.status = 'released_to_designer';
-      transaction.commissionAmount = commissionAmount;
-      transaction.designerPayout = designerPayout;
-      transaction.projectStatus = 'completed';
-      transaction.webhookData = data;
-      
-      await transaction.save();
-      
-      console.log(`Payment completed for ${tx_ref}. Released $${designerPayout} to designer ${transaction.designerId}`);
-      
-      // Save paid design permanently to UserDesignLibrary
-      if (transaction.purchaseType === 'ai_design' && transaction.sessionId) {
-        await savePaidDesignToLibrary(transaction, transaction.sessionId);
+      if (transaction.status === 'pending') {
+        transaction.status = 'held_in_escrow';
+        transaction.commissionAmount = commissionAmount;
+        transaction.designerPayout = designerPayout;
+        transaction.webhookData = data;
+        await transaction.save();
+        
+        console.log(`Payment confirmed for ${tx_ref}. Funds held in escrow. Payout will be $${designerPayout}`);
       }
       
-      // Send notification to designer
-      await sendNotification(transaction.designerId, {
-        title: 'Payment Received',
-        message: `Payment of $${designerPayout} has been released to your account for project ${tx_ref}`,
-        type: 'payment_received',
-        metadata: {
-          transactionId: transaction._id,
-          amount: designerPayout,
-          tx_ref
+      // If it's an AI design or Pro upgrade, release immediately
+      if (transaction.purchaseType === 'ai_design' || transaction.purchaseType === 'pro_upgrade') {
+        transaction.status = 'released_to_designer';
+        transaction.projectStatus = 'completed';
+        await transaction.save();
+        
+        if (transaction.purchaseType === 'ai_design' && transaction.sessionId) {
+          await savePaidDesignToLibrary(transaction, transaction.sessionId);
         }
-      });
-      
+      }
+
       return res.json({ 
         success: true, 
-        status: 'released_to_designer',
-        commissionAmount,
-        designerPayout
-      });
-    } else {
-      return res.json({ 
-        success: true, 
-        message: 'Transaction already processed or not in escrow',
-        currentStatus: transaction.status
+        status: transaction.status,
+        message: 'Payment processed successfully'
       });
     }
   } catch (error) {
@@ -476,21 +531,64 @@ router.post('/payment-completed', async (req, res) => {
   }
 });
 
-router.post('/complete-project', async (req, res) => {
+router.post('/complete-project', authenticateToken, async (req, res) => {
   try {
     const { tx_ref } = req.body;
+    const userId = req.user.userId; // Authenticated user ID
+
     const tx = await Transaction.findOne({ tx_ref });
-    if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+    if (!tx) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    // Authorization: Only the homeowner who initiated the transaction can complete it
+    if (tx.homeownerId.toString() !== userId) {
+      return res.status(403).json({ error: 'Access denied: Only the homeowner can complete this project' });
+    }
+
+    // Ensure the transaction is in a state to be completed
+    if (tx.status !== 'held_in_escrow') {
+      return res.status(400).json({ error: `Transaction is not in 'held_in_escrow' status. Current status: ${tx.status}` });
+    }
+
+    // Calculate commission and designer payout (using 12% rate for final release)
+    const commissionRate = 0.12; // 12% platform commission
+    const commissionAmount = Math.round(tx.amount * commissionRate);
+    const designerPayout = tx.amount - commissionAmount;
+
+    // Update transaction status and amounts
+    tx.status = 'released_to_designer';
+    tx.commissionAmount = commissionAmount;
+    tx.designerPayout = designerPayout;
+    tx.projectStatus = 'completed'; // Mark project as completed
     
-    // Mark project as completed
-    tx.projectStatus = 'completed';
     await tx.save();
 
-    // Trigger escrow release
-    const result = await releaseFunds(tx_ref);
-    res.json({ message: 'Funds released to designer', transaction: result });
+    console.log(`Project completed and funds released for ${tx_ref}. Released $${designerPayout} to designer ${tx.designerId}`);
+
+    // Send notification to designer
+    if (tx.designerId) {
+      await sendNotification(tx.designerId, {
+        title: 'Payment Received',
+        message: `Payment of $${designerPayout} has been released to your account for project ${tx_ref}`,
+        type: 'payment_received',
+        metadata: {
+          transactionId: tx._id,
+          amount: designerPayout,
+          tx_ref
+        }
+      });
+    }
+    
+    res.json({ 
+      message: 'Funds released to designer', 
+      transaction: tx,
+      commissionAmount,
+      designerPayout
+    });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('Complete project error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -611,6 +709,34 @@ router.post('/grant-access', async (req, res) => {
     });
   } catch (error) {
     console.error('Grant access error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get transaction by sessionId
+router.get('/transaction-by-session/:sessionId', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const userId = req.user.userId;
+    const userRole = req.user.role;
+
+    const transaction = await Transaction.findOne({ sessionId });
+
+    if (!transaction) {
+      return res.json({ transaction: null, message: 'No transaction found for this session' });
+    }
+
+    // Authorization: Only homeowner or designer of the transaction can view it
+    if (userRole === 'homeowner' && transaction.homeownerId.toString() !== userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    if (userRole === 'designer' && transaction.designerId?.toString() !== userId) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    res.json({ transaction });
+  } catch (error) {
+    console.error('Get transaction by session ID error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
