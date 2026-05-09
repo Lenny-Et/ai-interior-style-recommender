@@ -195,6 +195,13 @@ class ApiClient {
     });
   }
 
+  async shareContent(targetType: string, targetId: string, data?: { shareMethod?: string; platform?: string }) {
+    return this.request(`/social/share/${targetType}/${targetId}`, {
+      method: 'POST',
+      body: JSON.stringify(data || { shareMethod: 'link', platform: 'other' })
+    });
+  }
+
   async saveContent(targetType: string, targetId: string) {
     return this.request<{ message: string }>(`/social/save/${targetType}/${targetId}`, {
       method: 'POST',
@@ -208,8 +215,15 @@ class ApiClient {
   }
 
   // Feed endpoints
-  async getFeed(page = 1, limit = 20) {
-    return this.request('/feed?page=' + page + '&limit=' + limit);
+  async getFeed(params: { page?: number, limit?: number, followingOnly?: boolean, likesOnly?: boolean } = {}) {
+    const { page = 1, limit = 20, followingOnly = false, likesOnly = false } = params;
+    const query = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+      followingOnly: followingOnly.toString(),
+      likesOnly: likesOnly.toString()
+    });
+    return this.request('/feed?' + query.toString());
   }
 
   async getTrending(timeRange = '7d') {
@@ -251,6 +265,7 @@ class ApiClient {
     styles: string[];
     budget: string;
     creativity: string;
+    usePersonalization?: boolean;
     userId?: string;
   }) {
     return this.request('/ai/recommend', {
@@ -381,6 +396,7 @@ class ApiClient {
     tags?: string[];
     isPublic?: boolean;
     coverImage?: string;
+    colorPalette?: string[];
   }) {
     return this.request<{ board: any }>(`/boards/${boardId}`, {
       method: 'PUT',
@@ -518,6 +534,10 @@ class ApiClient {
   // Payments endpoints
   async getTransactions(page = 1, limit = 20) {
     return this.request('/payment/transactions?page=' + page + '&limit=' + limit);
+  }
+
+  async getTransactionBySessionId(sessionId: string) {
+    return this.request(`/payment/transaction-by-session/${sessionId}`);
   }
 
   async initializePayment(data: {
@@ -663,21 +683,16 @@ class ApiClient {
   }
 
   // Admin Moderation endpoints
-  async getPendingContent(params?: {
-    page?: number;
-    limit?: number;
-    type?: string;
-  }) {
-    const queryParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
-          queryParams.append(key, value.toString());
-        }
-      });
-    }
-    const queryString = queryParams.toString();
-    return this.request(`/admin/content/pending${queryString ? '?' + queryString : ''}`);
+  async getPendingContent(params: { type: string, page?: number, limit?: number }) {
+    const { type, page = 1, limit = 20 } = params;
+    return this.request(`/admin/content/pending?type=${type}&page=${page}&limit=${limit}`);
+  }
+
+  async getModerationHistory(params: { type: string, status?: string, page?: number, limit?: number }) {
+    const { type, status, page = 1, limit = 20 } = params;
+    let url = `/admin/content/history?type=${type}&page=${page}&limit=${limit}`;
+    if (status) url += `&status=${status}`;
+    return this.request(url);
   }
 
   async approveContent(type: string, id: string) {
@@ -704,6 +719,32 @@ class ApiClient {
     return this.request(`/admin/content/${type}/${id}/request-edit`, {
       method: 'POST',
       body: JSON.stringify({ note }),
+    });
+  }
+
+  // Admin Report endpoints
+  async getReports(page = 1, limit = 20, status = 'pending') {
+    return this.request(`/admin/reports?page=${page}&limit=${limit}&status=${status}`);
+  }
+
+  async resolveReport(reportId: string, note?: string) {
+    return this.request(`/admin/reports/${reportId}/resolve`, {
+      method: 'PUT',
+      body: JSON.stringify({ note }),
+    });
+  }
+
+  async dismissReport(reportId: string) {
+    return this.request(`/admin/reports/${reportId}/dismiss`, {
+      method: 'PUT',
+    });
+  }
+
+  // Social Report endpoint
+  async submitReport(data: { targetType: string, targetId: string, reason: string, details?: string }) {
+    return this.request('/social/report', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 
@@ -804,6 +845,48 @@ class ApiClient {
 
   async deletePortfolioItem(itemId: string) {
     return this.request(`/portfolio/${itemId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Inspiration endpoints
+  async getInspirationPosts(page = 1, limit = 20, filters?: { style?: string; roomType?: string }) {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      limit: limit.toString(),
+      ...(filters?.style && { style: filters.style }),
+      ...(filters?.roomType && { roomType: filters.roomType }),
+    });
+    return this.request(`/inspiration?${params}`);
+  }
+
+  async createInspirationPost(data: {
+    description?: string;
+    style?: string;
+    roomType?: string;
+    title?: string;
+    tags?: string[];
+  }, file: File) {
+    const formData = new FormData();
+    formData.append('image', file);
+    if (data.description) formData.append('description', data.description);
+    if (data.style) formData.append('style', data.style);
+    if (data.roomType) formData.append('roomType', data.roomType);
+    if (data.title) formData.append('title', data.title);
+    if (data.tags) formData.append('tags', data.tags.join(','));
+
+    return this.request('/inspiration', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
+  async getMyInspirationPosts() {
+    return this.request('/inspiration/me');
+  }
+
+  async deleteInspirationPost(postId: string) {
+    return this.request(`/inspiration/${postId}`, {
       method: 'DELETE',
     });
   }

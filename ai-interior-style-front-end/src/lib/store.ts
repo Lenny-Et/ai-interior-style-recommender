@@ -13,6 +13,7 @@ interface User {
   role: Role;
   avatarUrl?: string;
   approvalStatus?: 'pending' | 'approved' | 'rejected';
+  is_verified?: boolean;
   isPro?: boolean;
   profile?: any;
 }
