@@ -333,7 +333,7 @@ export default function UserManagementPage() {
                           <Badge variant={u.approvalStatus ? APPROVAL_STATUS_VARIANT[u.approvalStatus] : "gray"}>
                             {u.approvalStatus || "unknown"}
                           </Badge>
-                          {u.isPro && <Badge variant="purple">PRO</Badge>}
+                          {u.isPro && <Badge variant="brand">PRO</Badge>}
                         </div>
                       ) : (
                         <Badge variant={u.status ? STATUS_VARIANT[u.status] : "gray"}>{u.status || "unknown"}</Badge>
