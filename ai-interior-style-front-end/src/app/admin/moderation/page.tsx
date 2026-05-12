@@ -1,45 +1,176 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Avatar from "@/components/ui/Avatar";
 import { Shield, CheckCircle, X, Edit, AlertTriangle, Flag, Eye, Search } from "lucide-react";
 import { cn, STYLE_TAGS } from "@/lib/utils";
+import { apiClient } from "@/lib/api-client";
+import toast from "react-hot-toast";
 
 type ReviewStatus = "Pending" | "Approved" | "Rejected" | "Edit Requested";
 
-const QUEUE: {
-  id: string; designer: string; avatar: string; img: string;
-  title: string; style: string; room: string; submitted: string; status: ReviewStatus;
-}[] = [
-  { id: "MOD-001", designer: "James Park",     avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop", img: "https://images.unsplash.com/photo-1631679706909-1844bbd07221?w=400&h=280&fit=crop", title: "Nordic Warmth",    style: "Scandinavian",  room: "Bedroom",      submitted: "2026-04-07", status: "Pending" },
-  { id: "MOD-002", designer: "Lena Rodriguez", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&h=80&fit=crop", img: "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=400&h=280&fit=crop", title: "Earthy Warmth",   style: "Bohemian",      room: "Office",       submitted: "2026-04-06", status: "Pending" },
-  { id: "MOD-003", designer: "Mike Thompson",  avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80&h=80&fit=crop", img: "https://images.unsplash.com/photo-1556909172-54557c7e4fb7?w=400&h=280&fit=crop", title: "Steel & Stone",   style: "Industrial",    room: "Kitchen",      submitted: "2026-04-05", status: "Pending" },
-  { id: "MOD-004", designer: "Ana Kowalski",   avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&h=80&fit=crop", img: "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?w=400&h=280&fit=crop", title: "Golden Hours",    style: "Art Deco",      room: "Dining Room",  submitted: "2026-04-04", status: "Approved" },
-  { id: "MOD-005", designer: "David Chen",     avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop", img: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=280&fit=crop", title: "Zen Minimalism",  style: "Minimalist",    room: "Living Room",  submitted: "2026-04-03", status: "Edit Requested" },
-];
+interface PendingContent {
+  _id: string;
+  title: string;
+  description: string;
+  images: string[];
+  designerId: {
+    _id: string;
+    profile: {
+      firstName: string;
+      lastName: string;
+    };
+    profilePicture?: string;
+  };
+  metadata: {
+    roomType: string;
+    styles: string[];
+  };
+  isApproved: boolean;
+  createdAt: string;
+  editRequestedAt?: string;
+  rejectedAt?: string;
+  editRequestNote?: string;
+  rejectionReason?: string;
+}
 
-const REPORTS = [
-  { id: "RPT-01", type: "Inappropriate Content", reporter: "user_8821", target: "Design MOD-007", time: "1h ago" },
-  { id: "RPT-02", type: "Spam",                  reporter: "user_2241", target: "Designer Ana K.", time: "3h ago" },
-  { id: "RPT-03", type: "Misleading Info",        reporter: "user_5512", target: "Design MOD-012", time: "6h ago" },
-];
+interface Report {
+  _id: string;
+  type: string;
+  reporterId: string;
+  targetId: string;
+  reason: string;
+  createdAt: string;
+  status: string;
+}
 
 export default function ModerationPage() {
-  const [items, setItems] = useState(QUEUE);
+  const [items, setItems] = useState<PendingContent[]>([]);
+  const [reports, setReports] = useState<Report[]>([]);
   const [filter, setFilter] = useState<ReviewStatus | "All">("All");
   const [editNote, setEditNote] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
-  const update = (id: string, status: ReviewStatus) =>
-    setItems((prev) => prev.map((i) => i.id === id ? { ...i, status } : i));
+  // Load pending content from API
+  const loadPendingContent = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.getPendingContent({ type: 'portfolio', limit: 50 });
+      const data = (response as any).data || response;
+      setItems(data.content || []);
+    } catch (error) {
+      console.error('Failed to load pending content:', error);
+      toast.error('Failed to load pending content');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load content on mount
+  useEffect(() => {
+    loadPendingContent();
+  }, []);
+
+  // Get status for an item
+  const getItemStatus = (item: PendingContent): ReviewStatus => {
+    if (item.editRequestedAt) return "Edit Requested";
+    if (item.rejectedAt) return "Rejected";
+    if (item.isApproved) return "Approved";
+    return "Pending";
+  };
+
+  // Get designer name
+  const getDesignerName = (item: PendingContent): string => {
+    if (!item.designerId) return "Unknown Designer";
+    const { firstName, lastName } = item.designerId.profile || {};
+    return `${firstName || ''} ${lastName || ''}`.trim() || "Unknown Designer";
+  };
+
+  // Get primary image
+  const getPrimaryImage = (item: PendingContent): string => {
+    return item.images?.[0] || "https://picsum.photos/seed/fallback/400/280";
+  };
+
+  // Get primary style
+  const getPrimaryStyle = (item: PendingContent): string => {
+    return item.metadata?.styles?.[0] || "Modern";
+  };
 
   const filtered = items.filter((i) => {
-    if (filter !== "All" && i.status !== filter) return false;
-    if (search && !i.designer.toLowerCase().includes(search.toLowerCase()) && !i.title.toLowerCase().includes(search.toLowerCase())) return false;
+    const status = getItemStatus(i);
+    if (filter !== "All" && status !== filter) return false;
+    const designerName = getDesignerName(i);
+    if (search && !designerName.toLowerCase().includes(search.toLowerCase()) && !i.title.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  // Moderation action handlers
+  const handleApprove = async (item: PendingContent) => {
+    try {
+      setActionLoading(prev => ({ ...prev, [item._id]: true }));
+      await apiClient.approveContent('portfolio', item._id);
+      toast.success('Content approved successfully');
+      await loadPendingContent(); // Refresh data
+    } catch (error) {
+      console.error('Failed to approve content:', error);
+      toast.error('Failed to approve content');
+    } finally {
+      setActionLoading(prev => ({ ...prev, [item._id]: false }));
+    }
+  };
+
+  const handleReject = async (item: PendingContent, reason?: string) => {
+    try {
+      setActionLoading(prev => ({ ...prev, [item._id]: true }));
+      await apiClient.rejectContent('portfolio', item._id, reason);
+      toast.success('Content rejected successfully');
+      await loadPendingContent(); // Refresh data
+    } catch (error) {
+      console.error('Failed to reject content:', error);
+      toast.error('Failed to reject content');
+    } finally {
+      setActionLoading(prev => ({ ...prev, [item._id]: false }));
+    }
+  };
+
+  const handleRequestEdit = async (item: PendingContent) => {
+    try {
+      setActionLoading(prev => ({ ...prev, [item._id]: true }));
+      const note = editNote[item._id] || 'Please review and update this content';
+      await apiClient.requestEditContent('portfolio', item._id, note);
+      toast.success('Edit request sent successfully');
+      await loadPendingContent(); // Refresh data
+      // Clear the edit note for this item
+      setEditNote(prev => {
+        const newNotes = { ...prev };
+        delete newNotes[item._id];
+        return newNotes;
+      });
+    } catch (error) {
+      console.error('Failed to request edit:', error);
+      toast.error('Failed to request edit');
+    } finally {
+      setActionLoading(prev => ({ ...prev, [item._id]: false }));
+    }
+  };
+
+  const handleRemove = async (item: PendingContent) => {
+    try {
+      setActionLoading(prev => ({ ...prev, [item._id]: true }));
+      await apiClient.removeContent('portfolio', item._id, 'Content removed by moderator');
+      toast.success('Content removed successfully');
+      await loadPendingContent(); // Refresh data
+    } catch (error) {
+      console.error('Failed to remove content:', error);
+      toast.error('Failed to remove content');
+    } finally {
+      setActionLoading(prev => ({ ...prev, [item._id]: false }));
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-8">
@@ -51,9 +182,9 @@ export default function ModerationPage() {
           <p className="text-text-muted text-sm">Review designer uploads before they go live</p>
         </div>
         <div className="flex gap-2 text-xs text-text-muted">
-          <Badge variant="gold">Pending: {items.filter((i) => i.status === "Pending").length}</Badge>
-          <Badge variant="green">Approved: {items.filter((i) => i.status === "Approved").length}</Badge>
-          <Badge variant="red">Edit Requested: {items.filter((i) => i.status === "Edit Requested").length}</Badge>
+          <Badge variant="gold">Pending: {items.filter(i => getItemStatus(i) === "Pending").length}</Badge>
+          <Badge variant="green">Approved: {items.filter(i => getItemStatus(i) === "Approved").length}</Badge>
+          <Badge variant="red">Edit Requested: {items.filter(i => getItemStatus(i) === "Edit Requested").length}</Badge>
         </div>
       </div>
 
@@ -78,99 +209,146 @@ export default function ModerationPage() {
 
       {/* Approval queue */}
       <div className="space-y-4">
-        {filtered.map((item) => (
-          <Card key={item.id} className="overflow-hidden">
-            <div className="grid md:grid-cols-[280px_1fr] gap-0">
-              <div className="relative">
-                <img src={item.img} alt={item.title} className="w-full h-48 md:h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-                <Badge
-                  variant={item.status === "Approved" ? "green" : item.status === "Pending" ? "gold" : item.status === "Edit Requested" ? "orange" : "red"}
-                  className="absolute top-3 left-3"
-                >
-                  {item.status}
-                </Badge>
-              </div>
-              <div className="p-5 flex flex-col gap-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <Avatar src={item.avatar} name={item.designer} size="sm" />
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="w-8 h-8 rounded-full border-2 border-brand-500/30 border-t-brand-500 animate-spin mx-auto mb-4" />
+            <p className="text-text-muted">Loading pending content...</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-12">
+            <Shield className="w-12 h-12 text-text-muted mx-auto mb-4" />
+            <p className="text-text-muted">No content found matching your filters</p>
+          </div>
+        ) : (
+          filtered.map((item) => {
+            const status = getItemStatus(item);
+            const designerName = getDesignerName(item);
+            const primaryImage = getPrimaryImage(item);
+            const primaryStyle = getPrimaryStyle(item);
+            const roomType = item.metadata?.roomType || "Living Room";
+            
+            return (
+              <Card key={item._id} className="overflow-hidden">
+                <div className="grid md:grid-cols-[280px_1fr] gap-0">
+                  <div className="relative">
+                    <img src={primaryImage} alt={item.title} className="w-full h-48 md:h-full object-cover" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                    <Badge
+                      variant={status === "Approved" ? "green" : status === "Pending" ? "gold" : status === "Edit Requested" ? "orange" : "red"}
+                      className="absolute top-3 left-3"
+                    >
+                      {status}
+                    </Badge>
+                  </div>
+                  <div className="p-5 flex flex-col gap-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <Avatar src={item.designerId?.profilePicture} name={designerName} size="sm" />
+                        <div>
+                          <p className="text-sm font-semibold text-white">{designerName}</p>
+                          <p className="text-xs text-text-muted font-mono">{item._id}</p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-text-muted">{new Date(item.createdAt).toLocaleDateString()}</p>
+                    </div>
+
                     <div>
-                      <p className="text-sm font-semibold text-white">{item.designer}</p>
-                      <p className="text-xs text-text-muted font-mono">{item.id}</p>
+                      <p className="font-semibold text-white mb-1">{item.title}</p>
+                      <div className="flex gap-2">
+                        <Badge variant="brand">{primaryStyle}</Badge>
+                        <Badge variant="gray">{roomType}</Badge>
+                      </div>
+                    </div>
+
+                    {/* Edit note input */}
+                    {status === "Pending" && (
+                      <textarea
+                        value={editNote[item._id] ?? ""}
+                        onChange={(e) => setEditNote({ ...editNote, [item._id]: e.target.value })}
+                        placeholder="Optional: Add an edit request note for the designer…"
+                        rows={2}
+                        className="w-full px-3 py-2 rounded-xl bg-surface border border-surface-border text-xs text-purple-100 placeholder-text-muted focus:outline-none focus:border-brand-500 transition-all resize-none"
+                      />
+                    )}
+
+                    <div className="flex gap-2 flex-wrap mt-auto">
+                      <Button size="sm"><Eye className="w-3.5 h-3.5" /> Full Preview</Button>
+                      {status === "Pending" && (
+                        <>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10" 
+                            onClick={() => handleApprove(item)}
+                            disabled={actionLoading[item._id]}
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" /> 
+                            {actionLoading[item._id] ? 'Processing...' : 'Approve'}
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="text-gold-400 border-gold-500/30 hover:bg-gold-500/10" 
+                            onClick={() => handleRequestEdit(item)}
+                            disabled={actionLoading[item._id]}
+                          >
+                            <Edit className="w-3.5 h-3.5" /> 
+                            {actionLoading[item._id] ? 'Processing...' : 'Request Edit'}
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="destructive" 
+                            onClick={() => handleReject(item)}
+                            disabled={actionLoading[item._id]}
+                          >
+                            <X className="w-3.5 h-3.5" /> 
+                            {actionLoading[item._id] ? 'Processing...' : 'Reject'}
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
-                  <p className="text-xs text-text-muted">{item.submitted}</p>
                 </div>
-
-                <div>
-                  <p className="font-semibold text-white mb-1">{item.title}</p>
-                  <div className="flex gap-2">
-                    <Badge variant="brand">{item.style}</Badge>
-                    <Badge variant="gray">{item.room}</Badge>
-                  </div>
-                </div>
-
-                {/* Edit note input */}
-                {item.status === "Pending" && (
-                  <textarea
-                    value={editNote[item.id] ?? ""}
-                    onChange={(e) => setEditNote({ ...editNote, [item.id]: e.target.value })}
-                    placeholder="Optional: Add an edit request note for the designer…"
-                    rows={2}
-                    className="w-full px-3 py-2 rounded-xl bg-surface border border-surface-border text-xs text-purple-100 placeholder-text-muted focus:outline-none focus:border-brand-500 transition-all resize-none"
-                  />
-                )}
-
-                <div className="flex gap-2 flex-wrap mt-auto">
-                  <Button size="sm"><Eye className="w-3.5 h-3.5" /> Full Preview</Button>
-                  {item.status === "Pending" && (
-                    <>
-                      <Button size="sm" variant="ghost" className="text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10" onClick={() => update(item.id, "Approved")}>
-                        <CheckCircle className="w-3.5 h-3.5" /> Approve
-                      </Button>
-                      <Button size="sm" variant="ghost" className="text-gold-400 border-gold-500/30 hover:bg-gold-500/10" onClick={() => update(item.id, "Edit Requested")}>
-                        <Edit className="w-3.5 h-3.5" /> Request Edit
-                      </Button>
-                      <Button size="sm" variant="destructive" onClick={() => update(item.id, "Rejected")}>
-                        <X className="w-3.5 h-3.5" /> Reject
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Card>
-        ))}
+              </Card>
+            );
+          })
+        )}
       </div>
 
       {/* Report center */}
       <div>
         <h2 className="font-semibold text-white mb-3 flex items-center gap-2">
           <Flag className="w-4 h-4 text-red-400" /> Report Center
-          <Badge variant="red">{REPORTS.length}</Badge>
+          <Badge variant="red">{reports.length}</Badge>
         </h2>
         <Card>
-          <table className="data-table">
-            <thead><tr><th>Report ID</th><th>Type</th><th>Reporter</th><th>Target</th><th>Time</th><th>Actions</th></tr></thead>
-            <tbody>
-              {REPORTS.map((r) => (
-                <tr key={r.id}>
-                  <td className="font-mono text-xs">{r.id}</td>
-                  <td><Badge variant="red"><AlertTriangle className="w-3 h-3" />{r.type}</Badge></td>
-                  <td className="text-xs text-text-muted">{r.reporter}</td>
-                  <td className="text-xs text-purple-100">{r.target}</td>
-                  <td className="text-xs text-text-muted">{r.time}</td>
-                  <td>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="ghost"><Eye className="w-3 h-3" /></Button>
-                      <Button size="sm" variant="destructive"><X className="w-3 h-3" /></Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {reports.length === 0 ? (
+            <div className="text-center py-8">
+              <Flag className="w-8 h-8 text-text-muted mx-auto mb-2" />
+              <p className="text-text-muted text-sm">No reports at this time</p>
+            </div>
+          ) : (
+            <table className="data-table">
+              <thead><tr><th>Report ID</th><th>Type</th><th>Reporter</th><th>Target</th><th>Time</th><th>Actions</th></tr></thead>
+              <tbody>
+                {reports.map((r) => (
+                  <tr key={r._id}>
+                    <td className="font-mono text-xs">{r._id}</td>
+                    <td><Badge variant="red"><AlertTriangle className="w-3 h-3" />{r.type}</Badge></td>
+                    <td className="text-xs text-text-muted">{r.reporterId}</td>
+                    <td className="text-xs text-purple-100">{r.targetId}</td>
+                    <td className="text-xs text-text-muted">{new Date(r.createdAt).toLocaleString()}</td>
+                    <td>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="ghost"><Eye className="w-3 h-3" /></Button>
+                        <Button size="sm" variant="destructive"><X className="w-3 h-3" /></Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </Card>
       </div>
     </div>

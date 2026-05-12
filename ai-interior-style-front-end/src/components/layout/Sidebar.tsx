@@ -4,47 +4,49 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Sparkles, Images, Heart, Users, MessageSquare,
   ShoppingBag, CreditCard, Settings, BarChart2, Shield, UserCheck,
-  DollarSign, Ticket, PanelLeft, LogOut, Briefcase, Bell,
+  DollarSign, Ticket, PanelLeft, LogOut, Briefcase, Bell, Star,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 const navByRole = {
   homeowner: [
-    { label: "Dashboard",       href: "/dashboard",              icon: LayoutDashboard },
-    { label: "AI Recommender",  href: "/dashboard/ai",           icon: Sparkles },
-    { label: "Discover Feed",   href: "/dashboard/feed",         icon: Images },
-    { label: "Style Boards",    href: "/dashboard/boards",       icon: Heart },
-    { label: "Designer Search", href: "/dashboard/designers",    icon: Users },
-    { label: "AI Studio",       href: "/dashboard/ai-studio",    icon: MessageSquare },
-    { label: "Custom Requests", href: "/dashboard/requests",     icon: ShoppingBag },
-    { label: "Payments",        href: "/dashboard/payments",     icon: CreditCard },
-    { label: "Settings",        href: "/dashboard/settings",     icon: Settings },
+    { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { label: "AI Recommender", href: "/dashboard/ai", icon: Sparkles },
+    { label: "My Designs", href: "/dashboard/my-designs", icon: Star },
+    { label: "Discover Feed", href: "/dashboard/feed", icon: Images },
+    { label: "Style Boards", href: "/dashboard/boards", icon: Heart },
+    { label: "Designer Search", href: "/dashboard/designers", icon: Users },
+    { label: "Custom Requests", href: "/dashboard/requests", icon: ShoppingBag },
+    { label: "Messages", href: "/dashboard/chat", icon: MessageSquare },
+    { label: "Payments", href: "/dashboard/payments", icon: CreditCard },
+    { label: "Settings", href: "/dashboard/settings", icon: Settings },
   ],
   designer: [
-    { label: "Dashboard",       href: "/designer",               icon: LayoutDashboard },
-    { label: "Portfolio",       href: "/designer/portfolio",     icon: Briefcase },
-    { label: "Requests",        href: "/designer/requests",      icon: Ticket },
-    { label: "Analytics",       href: "/designer/analytics",     icon: BarChart2 },
-    { label: "Earnings",        href: "/designer/earnings",      icon: DollarSign },
-    { label: "Notifications",   href: "/designer/notifications", icon: Bell },
-    { label: "Settings",        href: "/designer/settings",      icon: Settings },
+    { label: "Dashboard", href: "/designer", icon: LayoutDashboard },
+    { label: "Portfolio", href: "/designer/portfolio", icon: Briefcase },
+    { label: "Requests", href: "/designer/requests", icon: Ticket },
+    { label: "Analytics", href: "/designer/analytics", icon: BarChart2 },
+    { label: "Earnings", href: "/designer/earnings", icon: DollarSign },
+    { label: "Notifications", href: "/designer/notifications", icon: Bell },
+    { label: "Settings", href: "/designer/settings", icon: Settings },
   ],
   admin: [
-    { label: "Overview",        href: "/admin",                  icon: LayoutDashboard },
-    { label: "Moderation",      href: "/admin/moderation",       icon: Shield },
-    { label: "Users",           href: "/admin/users",            icon: UserCheck },
-    { label: "Transactions",    href: "/admin/transactions",     icon: DollarSign },
-    { label: "Analytics",       href: "/admin/analytics",        icon: BarChart2 },
-    { label: "Configuration",   href: "/admin/config",           icon: Settings },
+    { label: "Overview", href: "/admin", icon: LayoutDashboard },
+    { label: "Moderation", href: "/admin/moderation", icon: Shield },
+    { label: "Users", href: "/admin/users", icon: UserCheck },
+    { label: "Transactions", href: "/admin/transactions", icon: DollarSign },
+    { label: "Analytics", href: "/admin/analytics", icon: BarChart2 },
+    { label: "Configuration", href: "/admin/config", icon: Settings },
   ],
   guest: [],
 };
 
 export default function Sidebar() {
-  const { user, sidebarOpen } = useAppStore();
+  const { user, sidebarOpen, logout } = useAppStore();
   const role = user?.role ?? "guest";
   const pathname = usePathname();
+  const router = useRouter();
   const items = navByRole[role] ?? [];
 
   return (
@@ -79,7 +81,13 @@ export default function Sidebar() {
 
       {/* Bottom: user + logout */}
       <div className="p-3 border-t border-surface-border">
-        <button className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-all">
+        <button
+          onClick={() => {
+            logout();
+            router.push('/login');
+          }}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-all"
+        >
           <LogOut className="w-4 h-4 shrink-0" />
           <span>Sign out</span>
         </button>

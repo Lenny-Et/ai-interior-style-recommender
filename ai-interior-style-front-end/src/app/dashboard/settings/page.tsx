@@ -14,18 +14,43 @@ const TABS = ["Profile", "Preferences", "Notifications", "Security", "Danger Zon
 type Tab = typeof TABS[number];
 
 export default function SettingsPage() {
-  const { user, theme, setTheme } = useAppStore();
+  const { user, theme, setTheme, updateUserProfile, isLoading, error } = useAppStore();
   const [tab, setTab]         = useState<Tab>("Profile");
   const [showPw, setShowPw]   = useState(false);
   const [saving, setSaving]   = useState(false);
-  const [styles, setStyles]   = useState<string[]>(["Minimalist", "Scandinavian"]);
-  const [rooms, setRooms]     = useState<string[]>(["Living Room", "Bedroom"]);
+  const [formData, setFormData] = useState({
+    firstName: user?.profile?.firstName || '',
+    lastName: user?.profile?.lastName || '',
+    email: user?.email || '',
+    company: user?.profile?.company || '',
+    bio: user?.profile?.bio || '',
+  });
+  const [styles, setStyles]   = useState<string[]>(user?.profile?.preferredStyles || ["Minimalist", "Scandinavian"]);
+  const [rooms, setRooms]     = useState<string[]>(user?.profile?.preferredRooms || ["Living Room", "Bedroom"]);
 
   const save = async () => {
     setSaving(true);
-    await new Promise(r => setTimeout(r, 900));
-    setSaving(false);
-    toast.success("Settings saved!");
+    try {
+      const profileData = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        company: formData.company,
+        bio: formData.bio,
+        preferredStyles: styles,
+        preferredRooms: rooms,
+      };
+      
+      await updateUserProfile(profileData);
+      toast.success("Settings saved!");
+    } catch (error: any) {
+      toast.error(error.error || error.message || "Failed to save settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const toggleStyle = (s: string) =>
@@ -66,9 +91,37 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="grid sm:grid-cols-2 gap-4">
-              <Input id="s-name"     label="Full Name"       defaultValue={user?.name}  icon={User} />
-              <Input id="s-email"    label="Email Address"   defaultValue={user?.email} icon={Mail} type="email" />
-              <Input id="s-location" label="Location"        placeholder="City, Country"  icon={Globe} />
+              <Input 
+                id="s-firstname" 
+                label="First Name" 
+                value={formData.firstName}
+                onChange={(e) => handleInputChange('firstName', e.target.value)}
+                icon={User} 
+              />
+              <Input 
+                id="s-lastname" 
+                label="Last Name" 
+                value={formData.lastName}
+                onChange={(e) => handleInputChange('lastName', e.target.value)}
+                icon={User} 
+              />
+              <Input 
+                id="s-email"    
+                label="Email Address"   
+                value={formData.email}
+                onChange={(e) => handleInputChange('email', e.target.value)}
+                icon={Mail} 
+                type="email" 
+                disabled // Email typically requires separate verification flow
+              />
+              <Input 
+                id="s-company" 
+                label="Company (Optional)"        
+                value={formData.company}
+                onChange={(e) => handleInputChange('company', e.target.value)}
+                icon={Globe} 
+                placeholder="Your company name"
+              />
               <div>
                 <label className="text-xs font-semibold text-purple-300 uppercase tracking-wider mb-2 block">Role</label>
                 <div className="px-4 py-3 rounded-xl bg-surface border border-surface-border flex items-center justify-between">
@@ -79,10 +132,20 @@ export default function SettingsPage() {
             </div>
             <div>
               <label className="text-xs font-semibold text-purple-300 uppercase tracking-wider mb-2 block">Bio</label>
-              <textarea rows={3} placeholder="Tell designers about your taste…"
-                className="w-full px-4 py-3 rounded-xl bg-surface border border-surface-border text-sm text-purple-100 placeholder-text-muted focus:outline-none focus:border-brand-500 transition-all resize-none" />
+              <textarea 
+                rows={3} 
+                placeholder="Tell designers about your taste…"
+                value={formData.bio}
+                onChange={(e) => handleInputChange('bio', e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-surface border border-surface-border text-sm text-purple-100 placeholder-text-muted focus:outline-none focus:border-brand-500 transition-all resize-none" 
+              />
             </div>
-            <Button loading={saving} onClick={save}><CheckCircle className="w-4 h-4" /> Save Changes</Button>
+            <Button loading={saving || isLoading} onClick={save}><CheckCircle className="w-4 h-4" /> Save Changes</Button>
+            {error && (
+              <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/40 text-red-400 text-sm">
+                {error}
+              </div>
+            )}
           </CardBody>
         </Card>
       )}

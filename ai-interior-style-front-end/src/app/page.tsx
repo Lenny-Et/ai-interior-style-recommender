@@ -295,7 +295,7 @@ export default function LandingPage() {
               <p className="text-text-muted mb-8">Join 50,000+ homeowners who've already discovered their perfect interior style.</p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <Link href="/auth/register"><Button size="lg" className="shadow-glow">Get Started Free</Button></Link>
-                <Link href="/gallery"><Button variant="ghost" size="lg">Browse Gallery</Button></Link>
+                <Link href="/dashboard/feed"><Button variant="ghost" size="lg">Browse Designs</Button></Link>
               </div>
             </div>
           </div>
@@ -311,9 +311,9 @@ export default function LandingPage() {
           <span className="font-display font-bold text-white">Aura Interiors</span>
         </div>
         <div className="flex flex-wrap justify-center gap-5 mb-4">
-          {["Privacy","Terms","About","Blog","Contact","FAQ"].map((l) => (
-            <Link key={l} href={`/${l.toLowerCase()}`} className="hover:text-white transition-colors">{l}</Link>
-          ))}
+          <Link href="/auth/login" className="hover:text-white transition-colors">Sign In</Link>
+          <Link href="/auth/register" className="hover:text-white transition-colors">Get Started</Link>
+          <Link href="/dashboard/designers" className="hover:text-white transition-colors">Find Designers</Link>
         </div>
         <p>© {new Date().getFullYear()} Aura Interiors. All rights reserved.</p>
       </footer>
