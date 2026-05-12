@@ -2,8 +2,11 @@
   "name": "ai-interior-style-back-end",
   "version": "1.0.0",
   "description": "Back-end",
-  "main": "index.js",
+  "type": "module",
+  "main": "src/server.js",
   "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -11,6 +14,7 @@
   "license": "ISC",
   "dependencies": {
     "axios": "^1.15.0",
+    "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
