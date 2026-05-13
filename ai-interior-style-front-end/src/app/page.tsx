@@ -5,9 +5,10 @@ import Image from "next/image";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import {
-  Sparkles, ArrowRight, Star, Play, ChevronRight,
+  Sparkles, ArrowRight, Star, Play, ChevronRight, X,
   Palette, Zap, Users, Shield, CheckCircle, Clock, Upload, MousePointer,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const BEFORE_AFTER = [
   {
@@ -51,6 +52,7 @@ const QUIZ_STYLES = [
 
 export default function LandingPage() {
   const [activeBA, setActiveBA] = useState(0);
+  const [showDemo, setShowDemo] = useState(false);
   const [quizStep, setQuizStep] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -113,7 +115,10 @@ export default function LandingPage() {
                 Start for Free <ArrowRight className="w-4 h-4" />
               </Button>
             </Link>
-            <button className="flex items-center gap-2 text-sm text-text-muted hover:text-white transition-colors">
+            <button 
+              onClick={() => setShowDemo(true)}
+              className="flex items-center gap-2 text-sm text-text-muted hover:text-white transition-colors"
+            >
               <div className="w-9 h-9 rounded-full border border-surface-border flex items-center justify-center bg-surface-card hover:border-brand-500 transition-colors">
                 <Play className="w-3.5 h-3.5 text-brand-400 ml-0.5" />
               </div>
@@ -311,6 +316,41 @@ export default function LandingPage() {
         </div>
         <p>© {new Date().getFullYear()} Homitify. All rights reserved.</p>
       </footer>
+
+      {/* ─── Watch Demo Modal ─────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showDemo && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowDemo(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-4xl aspect-video bg-surface-card rounded-2xl border border-surface-border overflow-hidden shadow-2xl"
+            >
+              <button
+                onClick={() => setShowDemo(false)}
+                className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <iframe
+                className="w-full h-full"
+                src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1" // Placeholder video, you can replace with a real demo
+                title="Homitify Demo"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
