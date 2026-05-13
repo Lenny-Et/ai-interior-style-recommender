@@ -33,13 +33,13 @@ const config: Config = {
           600: "#d97706",
         },
         surface: {
-          DEFAULT: "#0f0a1a",
-          card:    "#1a1028",
-          border:  "#2d1f42",
-          hover:   "#231535",
+          DEFAULT: "var(--bg)",
+          card:    "var(--bg-card)",
+          border:  "var(--border)",
+          hover:   "var(--bg-hover)",
         },
         text: {
-          muted: "#a78bba",
+          muted: "var(--text-muted)",
         },
       },
       backgroundImage: {
@@ -69,7 +69,7 @@ const config: Config = {
         glow:       "0 0 30px rgba(217,70,239,0.3)",
         "glow-sm":  "0 0 12px rgba(217,70,239,0.2)",
         "glow-gold":"0 0 20px rgba(251,191,36,0.35)",
-        card:       "0 4px 24px rgba(0,0,0,0.4)",
+        card:       "var(--shadow-card)",
       },
       backdropBlur: { xs: "2px" },
     },

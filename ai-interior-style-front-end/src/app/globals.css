@@ -4,7 +4,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── CSS Variables ─────────────────────────────────────────────────────── */
+/* ─── CSS Variables: Dark Mode (default) ──────────────────────────────── */
 :root {
   --bg:           #0f0a1a;
   --bg-card:      #1a1028;
@@ -15,8 +15,59 @@
   --gold:         #f59e0b;
   --text:         #f3e8ff;
   --text-muted:   #a78bba;
+  --text-heading: #ffffff;
   --font-inter:   'Inter', system-ui, sans-serif;
   --font-playfair:'Playfair Display', Georgia, serif;
+  --shadow-card:  0 4px 24px rgba(0,0,0,0.4);
+  --glass-bg:     rgba(26,16,40,0.7);
+  --glass-border: rgba(45,31,66,0.8);
+  --selection-bg: rgba(217,70,239,0.3);
+  --selection-text:#fff;
+  --noise-opacity: 0.025;
+  --orb-brand:    rgba(217,70,239,0.35);
+  --orb-violet:   rgba(139,92,246,0.3);
+  --orb-gold:     rgba(245,158,11,0.25);
+  --gradient-from: #e879f9;
+  --gradient-mid:  #a78bfa;
+  --gradient-to:   #f59e0b;
+  --toast-bg:     #1a1028;
+  --toast-border: #2d1f42;
+  --toast-text:   #f3e8ff;
+  --input-text:   #e9d5ff;
+  --skeleton-from: #1a1028;
+  --skeleton-mid:  #231535;
+}
+
+/* ─── CSS Variables: Light Mode ───────────────────────────────────────── */
+html.light {
+  --bg:           #f8f6fb;
+  --bg-card:      #ffffff;
+  --bg-hover:     #f0ecf5;
+  --border:       #e2d8f0;
+  --brand:        #c026d3;
+  --brand-light:  #d946ef;
+  --gold:         #d97706;
+  --text:         #1e1033;
+  --text-muted:   #6b5a80;
+  --text-heading: #0f0a1a;
+  --shadow-card:  0 2px 12px rgba(100,60,140,0.08);
+  --glass-bg:     rgba(255,255,255,0.8);
+  --glass-border: rgba(226,216,240,0.8);
+  --selection-bg: rgba(192,38,211,0.2);
+  --selection-text:#1e1033;
+  --noise-opacity: 0.015;
+  --orb-brand:    rgba(217,70,239,0.12);
+  --orb-violet:   rgba(139,92,246,0.1);
+  --orb-gold:     rgba(245,158,11,0.08);
+  --gradient-from: #c026d3;
+  --gradient-mid:  #7c3aed;
+  --gradient-to:   #d97706;
+  --toast-bg:     #ffffff;
+  --toast-border: #e2d8f0;
+  --toast-text:   #1e1033;
+  --input-text:   #1e1033;
+  --skeleton-from: #f0ecf5;
+  --skeleton-mid:  #e2d8f0;
 }
 
 /* ─── Base reset ────────────────────────────────────────────────────────── */
@@ -30,6 +81,7 @@ body {
   font-family: var(--font-inter);
   min-height: 100vh;
   overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* ─── Scrollbar ─────────────────────────────────────────────────────────── */
@@ -39,20 +91,20 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--brand); }
 
 /* ─── Selection ─────────────────────────────────────────────────────────── */
-::selection { background: rgba(217,70,239,0.3); color: #fff; }
+::selection { background: var(--selection-bg); color: var(--selection-text); }
 
 /* ─── Utility layers ─────────────────────────────────────────────────────── */
 @layer components {
   /* Glass card */
   .glass {
-    background: rgba(26,16,40,0.7);
+    background: var(--glass-bg);
     backdrop-filter: blur(16px);
-    border: 1px solid rgba(45,31,66,0.8);
+    border: 1px solid var(--glass-border);
   }
 
   /* Gradient text */
   .gradient-text {
-    background: linear-gradient(135deg, #e879f9 0%, #a78bfa 50%, #f59e0b 100%);
+    background: linear-gradient(135deg, var(--gradient-from) 0%, var(--gradient-mid) 50%, var(--gradient-to) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -82,7 +134,7 @@ body {
 
   /* Skeleton shimmer */
   .skeleton {
-    background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-hover) 50%, var(--bg-card) 75%);
+    background: linear-gradient(90deg, var(--skeleton-from) 25%, var(--skeleton-mid) 50%, var(--skeleton-from) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.8s linear infinite;
   }
@@ -90,9 +142,10 @@ body {
   /* Input base */
   .input {
     @apply w-full px-4 py-3 rounded-xl bg-surface border border-surface-border
-           text-sm text-purple-100 placeholder-text-muted
+           text-sm placeholder-text-muted
            focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/40
            transition-all duration-200;
+    color: var(--input-text);
   }
 
   /* Badge */
@@ -107,7 +160,8 @@ body {
 
   /* Section heading */
   .section-title {
-    @apply font-display text-3xl md:text-4xl font-bold text-white;
+    @apply font-display text-3xl md:text-4xl font-bold;
+    color: var(--text-heading);
   }
 }
 
@@ -117,7 +171,7 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.025;
+  opacity: var(--noise-opacity);
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   z-index: 9999;
 }
@@ -129,9 +183,9 @@ body {
   filter: blur(80px);
   pointer-events: none;
 }
-.orb-brand { background: radial-gradient(circle, rgba(217,70,239,0.35) 0%, transparent 70%); }
-.orb-violet { background: radial-gradient(circle, rgba(139,92,246,0.3) 0%, transparent 70%); }
-.orb-gold  { background: radial-gradient(circle, rgba(245,158,11,0.25) 0%, transparent 70%); }
+.orb-brand { background: radial-gradient(circle, var(--orb-brand) 0%, transparent 70%); }
+.orb-violet { background: radial-gradient(circle, var(--orb-violet) 0%, transparent 70%); }
+.orb-gold  { background: radial-gradient(circle, var(--orb-gold) 0%, transparent 70%); }
 
 /* ─── Animated border gradient ─────────────────────────────────────────── */
 .border-glow {
@@ -161,13 +215,19 @@ body {
 
 /* ─── Toast overrides ───────────────────────────────────────────────────── */
 .react-hot-toast > div {
-  background: var(--bg-card) !important;
-  border: 1px solid var(--border) !important;
-  color: var(--text) !important;
+  background: var(--toast-bg) !important;
+  border: 1px solid var(--toast-border) !important;
+  color: var(--toast-text) !important;
 }
 
 /* ─── Table ─────────────────────────────────────────────────────────────── */
 .data-table { @apply w-full text-sm; }
 .data-table th { @apply px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase tracking-wider border-b border-surface-border; }
-.data-table td { @apply px-4 py-3.5 border-b border-surface-border/50 text-purple-100; }
+.data-table td { @apply px-4 py-3.5 border-b border-surface-border/50; color: var(--text); }
 .data-table tr:hover td { @apply bg-surface-hover; }
+
+/* ─── Light mode overrides for hardcoded Tailwind colors ───────────────── */
+html.light .text-white { color: var(--text-heading); }
+html.light .text-purple-100 { color: var(--text); }
+html.light .text-purple-300 { color: var(--text-muted); }
+html.light .bg-black\/50 { background-color: rgba(0,0,0,0.3); }
