@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import { Sparkles, Mail, Lock, User, Eye, EyeOff, ArrowRight, Home, Briefcase, CheckCircle } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, ArrowRight, Home, Briefcase, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
@@ -42,7 +42,7 @@ export default function RegisterPage() {
         }
       });
       
-      toast.success("Account created! Welcome to Aura.");
+      toast.success("Account created! Welcome to Homitify.");
       router.push(role === "designer" ? "/designer" : "/dashboard");
     } catch (error: any) {
       toast.error(error.error || error.message || "Registration failed. Please try again.");
@@ -55,11 +55,8 @@ export default function RegisterPage() {
       <div className="orb orb-violet w-64 h-64 bottom-0 left-0 opacity-20 absolute pointer-events-none" />
 
       <div className="w-full max-w-lg relative">
-        {/* Logo */}
+        {/* Header */}
         <div className="text-center mb-8">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-600 to-violet-600 flex items-center justify-center mx-auto mb-3 shadow-glow">
-            <Sparkles className="w-6 h-6 text-white" />
-          </div>
           <h1 className="font-display text-3xl font-bold text-white">Create your account</h1>
           <p className="text-text-muted text-sm mt-1">Join 50,000+ members transforming their spaces</p>
         </div>
@@ -82,7 +79,7 @@ export default function RegisterPage() {
           {step === 1 ? (
             <div>
               <h2 className="font-semibold text-white mb-1">I am a…</h2>
-              <p className="text-sm text-text-muted mb-5">Choose how you'll use Aura Interiors</p>
+              <p className="text-sm text-text-muted mb-5">Choose how you'll use Homitify</p>
               <div className="grid grid-cols-2 gap-3 mb-6">
                 {ROLES.map(({ value, label, icon: Icon, desc }) => (
                   <button

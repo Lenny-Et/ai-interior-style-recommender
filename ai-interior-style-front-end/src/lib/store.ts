@@ -287,7 +287,7 @@ export const useAppStore = create<AppState>()(
       },
     }),
     {
-      name: 'aura-interiors-store',
+      name: 'homitify-store',
       partialize: (state) => ({
         theme: state.theme,
         sidebarOpen: state.sidebarOpen,

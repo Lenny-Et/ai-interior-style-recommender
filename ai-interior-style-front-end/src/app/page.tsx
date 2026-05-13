@@ -66,11 +66,8 @@ export default function LandingPage() {
       <header className="sticky top-0 z-40 border-b border-surface-border bg-surface/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-violet-600 flex items-center justify-center shadow-glow-sm">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
             <span className="font-display font-bold text-white text-xl">
-              Aura<span className="gradient-text">.</span>
+              Homitify<span className="gradient-text">.</span>
             </span>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-text-muted">
@@ -99,7 +96,7 @@ export default function LandingPage() {
 
         <div className="relative max-w-7xl mx-auto text-center">
           <Badge variant="brand" className="mb-6 animate-fade-in">
-            <Sparkles className="w-3 h-3" /> Powered by Gemini AI
+            <Sparkles className="w-3 h-3" /> AI-Powered Interior Design
           </Badge>
           <h1 className="font-display text-5xl sm:text-6xl md:text-7xl font-bold leading-tight mb-6 animate-slide-up">
             Design Your Dream
@@ -305,17 +302,14 @@ export default function LandingPage() {
       {/* ─── Footer ─────────────────────────────────────────────────────────── */}
       <footer className="border-t border-surface-border py-10 px-4 text-center text-sm text-text-muted">
         <div className="flex items-center justify-center gap-2 mb-4">
-          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-brand-600 to-violet-600 flex items-center justify-center">
-            <Sparkles className="w-3 h-3 text-white" />
-          </div>
-          <span className="font-display font-bold text-white">Aura Interiors</span>
+          <span className="font-display font-bold text-white">Homitify</span>
         </div>
         <div className="flex flex-wrap justify-center gap-5 mb-4">
           <Link href="/auth/login" className="hover:text-white transition-colors">Sign In</Link>
           <Link href="/auth/register" className="hover:text-white transition-colors">Get Started</Link>
           <Link href="/dashboard/designers" className="hover:text-white transition-colors">Find Designers</Link>
         </div>
-        <p>© {new Date().getFullYear()} Aura Interiors. All rights reserved.</p>
+        <p>© {new Date().getFullYear()} Homitify. All rights reserved.</p>
       </footer>
     </div>
   );
