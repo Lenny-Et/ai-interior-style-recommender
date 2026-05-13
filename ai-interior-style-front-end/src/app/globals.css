@@ -223,7 +223,7 @@ body {
 /* ─── Table ─────────────────────────────────────────────────────────────── */
 .data-table { @apply w-full text-sm; }
 .data-table th { @apply px-4 py-3 text-left text-xs font-semibold text-text-muted uppercase tracking-wider border-b border-surface-border; }
-.data-table td { @apply px-4 py-3.5 border-b border-surface-border/50; color: var(--text); }
+.data-table td { @apply px-4 py-3.5 border-b border-surface-border; color: var(--text); }
 .data-table tr:hover td { @apply bg-surface-hover; }
 
 /* ─── Light mode overrides for hardcoded Tailwind colors ───────────────── */
