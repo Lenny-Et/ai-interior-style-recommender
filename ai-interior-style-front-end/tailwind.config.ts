@@ -39,7 +39,9 @@ const config: Config = {
           hover:   "var(--bg-hover)",
         },
         text: {
+          DEFAULT: "var(--text)",
           muted: "var(--text-muted)",
+          heading: "var(--text-heading)",
         },
       },
       backgroundImage: {

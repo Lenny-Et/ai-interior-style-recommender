@@ -63,20 +63,20 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface text-white">
+    <div className="min-h-screen bg-surface text-text light">
       {/* ─── Nav ──────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 border-b border-surface-border bg-surface/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-display font-bold text-white text-xl">
+            <span className="font-display font-bold text-text-heading text-xl">
               Homitify<span className="gradient-text">.</span>
             </span>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-text-muted">
-            <Link href="#features"  className="hover:text-white transition-colors">Features</Link>
-            <Link href="#quiz"      className="hover:text-white transition-colors">Style Quiz</Link>
-            <Link href="#gallery"   className="hover:text-white transition-colors">Gallery</Link>
-            <Link href="/auth/login"className="hover:text-white transition-colors">Sign In</Link>
+            <Link href="#features"  className="hover:text-brand-600 transition-colors">Features</Link>
+            <Link href="#quiz"      className="hover:text-brand-600 transition-colors">Style Quiz</Link>
+            <Link href="#gallery"   className="hover:text-brand-600 transition-colors">Gallery</Link>
+            <Link href="/auth/login"className="hover:text-brand-600 transition-colors">Sign In</Link>
           </nav>
           <div className="flex items-center gap-2">
             <Link href="/auth/login">
@@ -100,7 +100,7 @@ export default function LandingPage() {
           <Badge variant="brand" className="mb-6 animate-fade-in">
             <Sparkles className="w-3 h-3" /> AI-Powered Interior Design
           </Badge>
-          <h1 className="font-display text-5xl sm:text-6xl md:text-7xl font-bold leading-tight mb-6 animate-slide-up">
+          <h1 className="font-display text-5xl sm:text-6xl md:text-7xl font-bold leading-tight mb-6 animate-slide-up text-text-heading">
             Design Your Dream
             <br />
             <span className="gradient-text">Space with AI</span>
@@ -117,7 +117,7 @@ export default function LandingPage() {
             </Link>
             <button 
               onClick={() => setShowDemo(true)}
-              className="flex items-center gap-2 text-sm text-text-muted hover:text-white transition-colors"
+              className="flex items-center gap-2 text-sm text-text-muted hover:text-brand-600 transition-colors"
             >
               <div className="w-9 h-9 rounded-full border border-surface-border flex items-center justify-center bg-surface-card hover:border-brand-500 transition-colors">
                 <Play className="w-3.5 h-3.5 text-brand-400 ml-0.5" />
