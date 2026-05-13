@@ -5,10 +5,11 @@ import Image from "next/image";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import {
-  Sparkles, ArrowRight, Star, Play, ChevronRight, X,
+  Sparkles, ArrowRight, Star, Play, ChevronRight, X, Sun, Moon,
   Palette, Zap, Users, Shield, CheckCircle, Clock, Upload, MousePointer,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAppStore } from "@/lib/store";
 
 const BEFORE_AFTER = [
   {
@@ -51,6 +52,7 @@ const QUIZ_STYLES = [
 ];
 
 export default function LandingPage() {
+  const { theme, setTheme } = useAppStore();
   const [activeBA, setActiveBA] = useState(0);
   const [showDemo, setShowDemo] = useState(false);
   const [quizStep, setQuizStep] = useState(0);
@@ -63,7 +65,7 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface text-text light">
+    <div className="min-h-screen bg-surface text-text">
       {/* ─── Nav ──────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 border-b border-surface-border bg-surface/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -79,6 +81,13 @@ export default function LandingPage() {
             <Link href="/auth/login"className="hover:text-brand-600 transition-colors">Sign In</Link>
           </nav>
           <div className="flex items-center gap-2">
+            <button
+              id="theme-toggle-landing"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="p-2 rounded-lg text-text-muted hover:text-brand-500 hover:bg-surface-hover transition-all mr-2"
+            >
+              {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
             <Link href="/auth/login">
               <Button variant="ghost" size="sm">Sign In</Button>
             </Link>
