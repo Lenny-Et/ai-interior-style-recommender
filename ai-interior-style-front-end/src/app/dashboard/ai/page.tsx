@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import Image from "next/image";
 import Button from "@/components/ui/Button";
@@ -37,6 +37,7 @@ export default function AIRecommenderPage() {
   const [roomType, setRoomType] = useState("Living Room");
   const [budget, setBudget] = useState("$1,000–$2,500");
   const [styles, setStyles] = useState<string[]>([]);
+  const [usePersonalization, setUsePersonalization] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
@@ -45,6 +46,7 @@ export default function AIRecommenderPage() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentLimitType, setCurrentLimitType] = useState<string | null>(null);
   const [previewRec, setPreviewRec] = useState<AIRecommendation | null>(null);
+  const [previewImgLoaded, setPreviewImgLoaded] = useState(false);
   
   // Board Save State
   const [saveModalOpen, setSaveModalOpen] = useState(false);
@@ -53,6 +55,18 @@ export default function AIRecommenderPage() {
   const [isSavingToBoard, setIsSavingToBoard] = useState<string | null>(null); // boardId loading state
 
   const { user } = useAppStore();
+
+  // Close preview modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPreviewRec(null);
+        setSaveModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const onDrop = useCallback((files: File[]) => {
     const file = files[0];
@@ -130,6 +144,7 @@ export default function AIRecommenderPage() {
       toast.success(`Saved to board!`);
       setSaveModalOpen(false);
       setItemToSave(null);
+      setPreviewRec(null); // Cleanly close preview modal as well on success
     } catch (error: any) {
       toast.error(error.error || error.message || "Failed to save to board");
     } finally {
@@ -144,7 +159,9 @@ export default function AIRecommenderPage() {
   // Load saved recommendations
   const loadSavedRecommendations = async (specificSessionId?: string) => {
     try {
-      const userId = localStorage.getItem('userId') || '507f1f77bcf86cd799439011';
+      const userId = user?.id;
+      
+      if (!userId) return;
 
       if (specificSessionId) {
         // Load specific session (after payment redirect)
@@ -259,13 +276,21 @@ export default function AIRecommenderPage() {
       }
 
       // Get AI recommendations
-      const userId = localStorage.getItem('userId') || '507f1f77bcf86cd799439011';
+      const userId = user?.id;
+      
+      if (!userId) {
+        toast.error("Please log in to use the AI recommender");
+        setStep("prefs");
+        return;
+      }
+
       const response = await apiClient.getAIRecommendations({
         imageUrl,
         roomType,
         styles,
         budget,
         creativity: "0.7",
+        usePersonalization,
         userId
       });
 
@@ -453,7 +478,27 @@ export default function AIRecommenderPage() {
                 ))}
               </div>
             </div>
-            <Button fullWidth size="lg" onClick={runAI} className="shadow-glow">
+
+            {/* Personalization Toggle */}
+            <div className="bg-brand-600/10 border border-brand-500/20 rounded-xl p-4 flex items-start gap-3 mt-2 transition-all hover:border-brand-500/40">
+              <input 
+                type="checkbox" 
+                id="personalization-toggle"
+                className="mt-1 w-4 h-4 rounded border-brand-400 text-brand-500 focus:ring-brand-500 bg-surface-card cursor-pointer"
+                checked={usePersonalization}
+                onChange={(e) => setUsePersonalization(e.target.checked)}
+              />
+              <div>
+                <label htmlFor="personalization-toggle" className="text-sm font-bold text-white cursor-pointer block mb-1">
+                  Personalize using my Styleboard
+                </label>
+                <p className="text-xs text-brand-200/80">
+                  Allow the AI to draw subtle inspiration from the designs you've previously saved to your boards.
+                </p>
+              </div>
+            </div>
+
+            <Button fullWidth size="lg" onClick={runAI} className="shadow-glow mt-4">
               <Sparkles className="w-4 h-4" /> Generate AI Designs
             </Button>
           </div>
@@ -589,56 +634,95 @@ export default function AIRecommenderPage() {
       {/* ── Full-screen Preview Modal ── */}
       {previewRec && (
         <div
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setPreviewRec(null)}
+          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 sm:p-8 animate-in fade-in duration-200"
+          onClick={() => { setPreviewRec(null); setPreviewImgLoaded(false); }}
         >
+          {/* Modal panel: image fills the whole card, overlay appears on hover */}
           <div
-            className="relative max-w-3xl w-full bg-surface-card rounded-2xl overflow-hidden shadow-2xl"
+            className="group relative w-full max-w-3xl rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200"
+            style={{ aspectRatio: '4/3' }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Loading spinner — shown before image loads */}
+            {!previewImgLoaded && (
+              <div className="absolute inset-0 bg-surface-card flex items-center justify-center z-10">
+                <div className="w-12 h-12 rounded-full border-4 border-brand-500/30 border-t-brand-500 animate-spin" />
+              </div>
+            )}
+
+            {/* Full-bleed image */}
+            <img
+              src={previewRec.imageUrl}
+              alt={previewRec.name}
+              onLoad={() => setPreviewImgLoaded(true)}
+              onError={() => setPreviewImgLoaded(true)}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+
+            {/* Always-visible close button */}
             <button
-              onClick={() => setPreviewRec(null)}
-              className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-black/60 backdrop-blur flex items-center justify-center hover:bg-black/80 transition-colors"
+              onClick={() => { setPreviewRec(null); setPreviewImgLoaded(false); }}
+              className="absolute top-4 right-4 z-30 w-9 h-9 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center hover:bg-black/80 transition-colors border border-white/20"
+              aria-label="Close preview"
             >
               <X className="w-4 h-4 text-white" />
             </button>
-            <div className="relative">
-              <img src={previewRec.imageUrl} alt={previewRec.name} className="w-full max-h-[60vh] object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-              <div className="absolute bottom-4 left-4">
-                <Badge variant="brand" className="mb-2">{previewRec.style}</Badge>
-                <h3 className="font-bold text-white text-xl">{previewRec.name}</h3>
-                <p className="text-white/70 text-sm">Est. {previewRec.budget}</p>
-              </div>
-            </div>
-            <div className="p-5">
-              <p className="text-text-muted text-sm leading-relaxed mb-4">{previewRec.description}</p>
-              <div className="flex flex-wrap gap-1.5 mb-5">
-                {previewRec.products.map((p) => (
-                  <span key={p} className="px-2 py-1 rounded text-xs bg-surface text-text-muted border border-surface-border">{p}</span>
-                ))}
-              </div>
-              <div className="flex gap-3">
-                <Button
-                  className="flex-1"
-                  onClick={() => openSaveModal(previewRec)}
-                >
-                  <FolderHeart className="w-4 h-4" /> Save to Board
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => downloadImage(previewRec)}
-                >
-                  <Download className="w-4 h-4" /> Download
-                </Button>
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => shareRecommendation(previewRec)}
-                >
-                  <Share2 className="w-4 h-4" /> Share
-                </Button>
+
+            {/* Hover-reveal overlay — slides up from bottom */}
+            <div className="absolute inset-x-0 bottom-0 z-20 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 ease-out">
+              {/* Full gradient backdrop for readability */}
+              <div className="bg-gradient-to-t from-black/95 via-black/80 to-transparent pt-16 pb-5 px-5">
+
+                {/* Badges + title */}
+                <div className="flex flex-wrap gap-2 mb-1.5">
+                  <Badge variant="brand">{previewRec.style}</Badge>
+                  <Badge variant="gray">{previewRec.roomType}</Badge>
+                </div>
+                <h3 className="font-bold text-white text-lg leading-tight mb-0.5">{previewRec.name}</h3>
+                <p className="text-white/60 text-xs mb-3">Est. {previewRec.budget}</p>
+
+                {/* Description */}
+                <p className="text-white/75 text-xs leading-relaxed mb-3 line-clamp-2">{previewRec.description}</p>
+
+                {/* Products */}
+                {previewRec.products.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-4">
+                    {previewRec.products.slice(0, 5).map((p) => (
+                      <span key={p} className="px-2 py-0.5 rounded text-[11px] bg-white/10 text-white/80 border border-white/10 backdrop-blur-sm">{p}</span>
+                    ))}
+                    {previewRec.products.length > 5 && (
+                      <span className="px-2 py-0.5 rounded text-[11px] bg-white/10 text-white/60 border border-white/10">+{previewRec.products.length - 5} more</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => openSaveModal(previewRec)}
+                  >
+                    <FolderHeart className="w-3.5 h-3.5" /> Save to Board
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 border-white/20 text-white hover:bg-white/10"
+                    onClick={() => downloadImage(previewRec)}
+                  >
+                    <Download className="w-3.5 h-3.5" /> Download
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-white/20 text-white hover:bg-white/10"
+                    onClick={() => shareRecommendation(previewRec)}
+                    title="Share"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -648,7 +732,7 @@ export default function AIRecommenderPage() {
       {/* ── Save to Board Modal ── */}
       {saveModalOpen && itemToSave && (
         <div
-          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => setSaveModalOpen(false)}
         >
           <div

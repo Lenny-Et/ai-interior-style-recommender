@@ -7,13 +7,14 @@ import Card from "@/components/ui/Card";
 import {
   Heart, Download, Share2, Eye, Calendar, DollarSign,
   Filter, Grid, List, Search, Star, Archive, Trash2,
-  RefreshCw, ChevronDown, SortAsc, SortDesc
+  RefreshCw, ChevronDown, SortAsc, SortDesc, X, Sparkles
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import { useAppStore } from "@/lib/store";
 
 interface UserDesign {
   id: string;
@@ -71,6 +72,7 @@ type SortBy = 'purchaseDate' | 'name' | 'style' | 'viewCount';
 type FilterStatus = 'all' | 'active' | 'archived' | 'favorites';
 
 export default function MyDesignsPage() {
+  const { user } = useAppStore();
   const [designs, setDesigns] = useState<UserDesign[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -79,24 +81,41 @@ export default function MyDesignsPage() {
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('active');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [previewDesign, setPreviewDesign] = useState<UserDesign | null>(null);
+  const [previewImgLoaded, setPreviewImgLoaded] = useState(false);
   const [stats, setStats] = useState({
     totalDesigns: 0,
     favoriteDesigns: 0,
     archivedDesigns: 0,
-    totalSpent: 0,
-    averageDesignCost: 0
+    totalViews: 0,
+    averageConfidence: 0
   });
+
+  // Close preview modal on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPreviewDesign(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Load user's design library
   const loadDesigns = async () => {
     try {
       setLoading(true);
-      const userId = localStorage.getItem('userId') || '507f1f77bcf86cd799439011';
+      const userId = user?.id;
+      
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
+
       const response = await apiClient.getUserDesigns({
         page: 1,
         limit: 50,
         status: filterStatus === 'favorites' ? 'active' : filterStatus,
-        sortBy,
+        sortBy: sortBy === 'purchaseDate' ? 'createdAt' : sortBy,
         sortOrder,
         favoritesOnly: filterStatus === 'favorites',
         userId // Add userId for consistency
@@ -104,7 +123,24 @@ export default function MyDesignsPage() {
 
       const data = (response as any).data || response;
       setDesigns(data.designs || []);
-      setStats(data.summary || stats);
+      
+      // Update stats based on fetched data
+      if (data.designs) {
+        const favoriteCount = data.designs.filter((d: UserDesign) => d.userInteractions.isFavorite).length;
+        const archivedCount = data.designs.filter((d: UserDesign) => d.status === 'archived').length;
+        const totalViews = data.designs.reduce((acc: number, d: UserDesign) => acc + (d.userInteractions.viewCount || 0), 0);
+        const avgConf = data.designs.length > 0 
+          ? (data.designs.reduce((acc: number, d: UserDesign) => acc + (d.designData.confidence || 0), 0) / data.designs.length) 
+          : 0;
+
+        setStats({
+          totalDesigns: data.designs.length,
+          favoriteDesigns: favoriteCount,
+          archivedDesigns: archivedCount,
+          totalViews: totalViews,
+          averageConfidence: Math.round(avgConf * 100)
+        });
+      }
     } catch (error: any) {
       console.error('Failed to load designs:', error);
       toast.error(error.error || error.message || 'Failed to load designs');
@@ -206,7 +242,7 @@ export default function MyDesignsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-display text-3xl font-bold text-white mb-1">My Design Library</h1>
-            <p className="text-text-muted text-sm">Loading your premium designs...</p>
+            <p className="text-text-muted text-sm">Loading your AI designs...</p>
           </div>
         </div>
       </div>
@@ -219,7 +255,7 @@ export default function MyDesignsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-3xl font-bold text-white mb-1">My Design Library</h1>
-          <p className="text-text-muted text-sm">Your permanently saved premium AI designs</p>
+          <p className="text-text-muted text-sm">Your permanently saved AI designs</p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="ghost" onClick={loadDesigns} disabled={loading}>
@@ -262,17 +298,17 @@ export default function MyDesignsPage() {
         </Card>
         <Card className="p-5">
           <div className="w-9 h-9 rounded-xl bg-gold-500/10 flex items-center justify-center mb-3">
-            <DollarSign className="w-4 h-4 text-gold-400" />
+            <Eye className="w-4 h-4 text-gold-400" />
           </div>
-          <div className="text-2xl font-bold text-white font-display">${stats.totalSpent.toLocaleString()}</div>
-          <div className="text-xs text-text-muted mt-0.5">Total Invested</div>
+          <div className="text-2xl font-bold text-white font-display">{stats.totalViews}</div>
+          <div className="text-xs text-text-muted mt-0.5">Total Views</div>
         </Card>
         <Card className="p-5">
           <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center mb-3">
-            <Calendar className="w-4 h-4 text-blue-400" />
+            <Sparkles className="w-4 h-4 text-blue-400" />
           </div>
-          <div className="text-2xl font-bold text-white font-display">{stats.averageDesignCost}</div>
-          <div className="text-xs text-text-muted mt-0.5">Avg Cost</div>
+          <div className="text-2xl font-bold text-white font-display">{stats.averageConfidence}%</div>
+          <div className="text-xs text-text-muted mt-0.5">Avg Accuracy</div>
         </Card>
       </div>
 
@@ -299,7 +335,7 @@ export default function MyDesignsPage() {
               onChange={(e) => setSortBy(e.target.value as SortBy)}
               className="appearance-none bg-surface border border-surface-border rounded-lg px-4 py-2 pr-8 text-sm text-white focus:outline-none focus:border-brand-500"
             >
-              <option value="purchaseDate">Purchase Date</option>
+              <option value="purchaseDate">Generation Date</option>
               <option value="name">Name</option>
               <option value="style">Style</option>
               <option value="viewCount">Views</option>
@@ -336,7 +372,7 @@ export default function MyDesignsPage() {
           </div>
           <h3 className="text-lg font-semibold text-white mb-2">No designs found</h3>
           <p className="text-text-muted text-sm">
-            {searchQuery ? 'Try adjusting your search terms' : 'Start by purchasing premium AI designs'}
+            {searchQuery ? 'Try adjusting your search terms' : 'Start by generating new AI designs'}
           </p>
           {!searchQuery && (
             <Link href="/dashboard/ai">
@@ -372,11 +408,9 @@ export default function MyDesignsPage() {
                 
                 {/* Status Badges */}
                 <div className="absolute top-2 left-2 flex gap-2">
-                  {design.designData.isPremium && (
-                    <Badge variant="gold" className="text-xs">
-                      <Star className="w-3 h-3" /> Premium
-                    </Badge>
-                  )}
+                  <Badge variant="brand" className="text-xs">
+                    <Sparkles className="w-3 h-3" /> AI Design
+                  </Badge>
                   {design.userInteractions.isFavorite && (
                     <Badge variant="green" className="text-xs">
                       <Heart className="w-3 h-3" /> Favorite
@@ -412,10 +446,7 @@ export default function MyDesignsPage() {
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between text-xs text-text-muted">
-                    <span>Purchased {formatDate(design.purchaseInfo.purchaseDate)}</span>
-                    <span className="font-semibold text-emerald-400">
-                      ${design.purchaseInfo.amount}
-                    </span>
+                    <span>Generated {formatDate(design.purchaseInfo.purchaseDate)}</span>
                   </div>
                 </div>
 
@@ -427,8 +458,17 @@ export default function MyDesignsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
+                    title="Preview design"
+                    onClick={() => { setPreviewDesign(design); setPreviewImgLoaded(false); }}
+                  >
+                    <Eye className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => toggleFavorite(design.designId, design.userInteractions.isFavorite)}
                     className={design.userInteractions.isFavorite ? "text-red-400" : ""}
+                    title={design.userInteractions.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                   >
                     <Heart className={`w-4 h-4 ${design.userInteractions.isFavorite ? 'fill-current' : ''}`} />
                   </Button>
@@ -436,6 +476,7 @@ export default function MyDesignsPage() {
                     variant="ghost"
                     size="sm"
                     onClick={() => downloadDesign(design)}
+                    title="Download"
                   >
                     <Download className="w-4 h-4" />
                   </Button>
@@ -443,6 +484,7 @@ export default function MyDesignsPage() {
                     variant="ghost"
                     size="sm"
                     onClick={() => updateDesignStatus(design.designId, design.status === 'archived' ? 'active' : 'archived')}
+                    title={design.status === 'archived' ? 'Restore' : 'Archive'}
                   >
                     <Archive className="w-4 h-4" />
                   </Button>
@@ -450,6 +492,104 @@ export default function MyDesignsPage() {
               </div>
             </Card>
           ))}
+        </div>
+      )}
+
+      {/* ── Design Preview Modal ── */}
+      {previewDesign && (
+        <div
+          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 sm:p-8 animate-in fade-in duration-200"
+          onClick={() => { setPreviewDesign(null); setPreviewImgLoaded(false); }}
+        >
+          {/* Modal panel: full-bleed image, overlay on hover */}
+          <div
+            className="group relative w-full max-w-3xl rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200"
+            style={{ aspectRatio: '4/3' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Loading spinner */}
+            {!previewImgLoaded && (
+              <div className="absolute inset-0 bg-surface-card flex items-center justify-center z-10">
+                <div className="w-12 h-12 rounded-full border-4 border-brand-500/30 border-t-brand-500 animate-spin" />
+              </div>
+            )}
+
+            {/* Full-bleed image */}
+            <img
+              src={previewDesign.designData.imageUrl}
+              alt={previewDesign.designData.name}
+              onLoad={() => setPreviewImgLoaded(true)}
+              onError={() => setPreviewImgLoaded(true)}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+
+            {/* Always-visible close button */}
+            <button
+              onClick={() => { setPreviewDesign(null); setPreviewImgLoaded(false); }}
+              className="absolute top-4 right-4 z-30 w-9 h-9 rounded-full bg-black/60 backdrop-blur-md flex items-center justify-center hover:bg-black/80 transition-colors border border-white/20"
+              aria-label="Close preview"
+            >
+              <X className="w-4 h-4 text-white" />
+            </button>
+
+            {/* Hover-reveal overlay — slides up from bottom */}
+            <div className="absolute inset-x-0 bottom-0 z-20 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 ease-out">
+              <div className="bg-gradient-to-t from-black/95 via-black/80 to-transparent pt-16 pb-5 px-5">
+
+                {/* Badges + title */}
+                <div className="flex flex-wrap gap-2 mb-1.5">
+                  <Badge variant="brand" className="text-xs">{previewDesign.designData.style}</Badge>
+                  <Badge variant="gray" className="text-xs">{previewDesign.designData.roomType}</Badge>
+                  <Badge variant="gold" className="text-xs"><Sparkles className="w-3 h-3" /> AI Design</Badge>
+                </div>
+                <h3 className="font-bold text-white text-lg leading-tight mb-0.5">{previewDesign.designData.name}</h3>
+                <p className="text-white/60 text-xs mb-3">Budget: {previewDesign.designData.budget}</p>
+
+                {/* Description */}
+                <p className="text-white/75 text-xs leading-relaxed mb-3 line-clamp-2">{previewDesign.designData.description}</p>
+
+                {/* Products */}
+                {previewDesign.designData.products?.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-4">
+                    {previewDesign.designData.products.slice(0, 5).map((p) => (
+                      <span key={p} className="px-2 py-0.5 rounded text-[11px] bg-white/10 text-white/80 border border-white/10 backdrop-blur-sm">{p}</span>
+                    ))}
+                    {previewDesign.designData.products.length > 5 && (
+                      <span className="px-2 py-0.5 rounded text-[11px] bg-white/10 text-white/60 border border-white/10">+{previewDesign.designData.products.length - 5} more</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Meta + Actions row */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 text-xs text-white/50 shrink-0">
+                    <span className="flex items-center gap-1">
+                      <Eye className="w-3 h-3" /> {previewDesign.userInteractions.viewCount}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3" /> {formatDate(previewDesign.purchaseInfo.purchaseDate)}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`border border-white/20 ${previewDesign.userInteractions.isFavorite ? 'text-red-400' : 'text-white hover:bg-white/10'}`}
+                      onClick={() => toggleFavorite(previewDesign.designId, previewDesign.userInteractions.isFavorite)}
+                    >
+                      <Heart className={`w-3.5 h-3.5 ${previewDesign.userInteractions.isFavorite ? 'fill-current' : ''}`} />
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => downloadDesign(previewDesign)}
+                    >
+                      <Download className="w-3.5 h-3.5" /> Download
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -4,7 +4,7 @@ import Image from "next/image";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import { Plus, FolderHeart, Trash2, Share2, Download, MoreHorizontal, X, Check, Edit, Brain, Sparkles } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, CURATED_COLORS } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
 import toast from "react-hot-toast";
 
@@ -56,6 +56,7 @@ export default function StyleBoardsPage() {
   const [newBoardName, setNewBoardName] = useState("");
   const [newBoardDescription, setNewBoardDescription] = useState("");
   const [newBoardTags, setNewBoardTags] = useState<string[]>([]);
+  const [newBoardColorPalette, setNewBoardColorPalette] = useState<string[]>([]);
   const [activeBoard, setActiveBoard] = useState<string | null>(null);
   const [showEdit, setShowEdit] = useState(false);
   const [editingBoard, setEditingBoard] = useState<Board | null>(null);
@@ -63,7 +64,6 @@ export default function StyleBoardsPage() {
   const [selectedBoard, setSelectedBoard] = useState<Board | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterTag, setFilterTag] = useState<string | null>(null);
-  const [boardPrivacy, setBoardPrivacy] = useState(false);
   const [showAddItems, setShowAddItems] = useState(false);
   const [availableItems, setAvailableItems] = useState<any[]>([]);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
@@ -134,7 +134,7 @@ export default function StyleBoardsPage() {
     setNewBoardName(board.name);
     setNewBoardDescription(board.description || "");
     setNewBoardTags(board.tags);
-    setBoardPrivacy(board.isPublic);
+    setNewBoardColorPalette((board as any).colorPalette || []);
     setShowEdit(true);
   };
 
@@ -236,7 +236,8 @@ export default function StyleBoardsPage() {
         name: newBoardName,
         description: newBoardDescription,
         tags: newBoardTags,
-        isPublic: editingBoard.isPublic
+        isPublic: editingBoard.isPublic,
+        colorPalette: newBoardColorPalette
       });
 
       const updatedBoard = (response as any).data || response;
@@ -248,6 +249,7 @@ export default function StyleBoardsPage() {
       setNewBoardName("");
       setNewBoardDescription("");
       setNewBoardTags([]);
+      setNewBoardColorPalette([]);
       setShowEdit(false);
       setEditingBoard(null);
       
@@ -327,7 +329,7 @@ export default function StyleBoardsPage() {
       // Reload board data
       const boardResponse = await apiClient.getBoards(1, 20);
       const boardsData = (boardResponse as any).data || boardResponse;
-      const updatedBoards = boardsData.boards || [];
+      const updatedBoards = (boardsData.boards || []) as Board[];
       const updatedBoard = updatedBoards.find(board => board._id === selectedBoard._id);
       if (updatedBoard) {
         setSelectedBoard(updatedBoard);
@@ -597,6 +599,46 @@ export default function StyleBoardsPage() {
                   ))}
                 </div>
               </div>
+
+              {/* Color Palette Picker */}
+              <div>
+                <label className="block text-sm font-medium text-white mb-1">Favourite Color Palette</label>
+                <p className="text-xs text-text-muted mb-3">Pick colors you love — the AI will use them when personalizing designs for you.</p>
+                <div className="flex flex-wrap gap-2">
+                  {CURATED_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      title={color}
+                      onClick={() => setNewBoardColorPalette(prev =>
+                        prev.includes(color) ? prev.filter(c => c !== color) : [...prev, color]
+                      )}
+                      className={cn(
+                        "w-8 h-8 rounded-full border-2 transition-all duration-150 hover:scale-110",
+                        newBoardColorPalette.includes(color)
+                          ? "border-brand-400 ring-2 ring-brand-400/50 scale-110"
+                          : "border-surface-border hover:border-white/40"
+                      )}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+                {newBoardColorPalette.length > 0 && (
+                  <div className="flex items-center gap-2 mt-3">
+                    <span className="text-xs text-text-muted">Selected:</span>
+                    {newBoardColorPalette.map(c => (
+                      <div key={c} className="w-5 h-5 rounded-full border border-surface-border" style={{ backgroundColor: c }} title={c} />
+                    ))}
+                    <button
+                      type="button"
+                      className="text-xs text-text-muted hover:text-white ml-auto transition-colors"
+                      onClick={() => setNewBoardColorPalette([])}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="flex gap-3 pt-4">
                 <Button variant="ghost" onClick={() => setShowNew(false)} className="flex-1">Cancel</Button>
                 <Button onClick={createBoard} className="flex-1">Create Board</Button>
@@ -609,7 +651,7 @@ export default function StyleBoardsPage() {
       {/* Edit Board Modal */}
       {showEdit && editingBoard && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="glass rounded-2xl border border-surface-border p-6 max-w-md w-full">
+          <div className="glass rounded-2xl border border-surface-border p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-white">Edit Board</h3>
               <button onClick={() => setShowEdit(false)} className="text-text-muted hover:text-white">
@@ -655,35 +697,48 @@ export default function StyleBoardsPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Color Palette Picker */}
               <div>
-                <label className="block text-sm font-medium text-white mb-2">Privacy</label>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="privacy"
-                      checked={!boardPrivacy}
-                      onChange={() => setBoardPrivacy(false)}
-                      className="w-4 h-4 text-brand-500 focus:ring-brand-500"
+                <label className="block text-sm font-medium text-white mb-1">Favourite Color Palette</label>
+                <p className="text-xs text-text-muted mb-3">Pick colors you love — the AI will use them when personalizing designs for you.</p>
+                <div className="flex flex-wrap gap-2">
+                  {CURATED_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      title={color}
+                      onClick={() => setNewBoardColorPalette(prev =>
+                        prev.includes(color) ? prev.filter(c => c !== color) : [...prev, color]
+                      )}
+                      className={cn(
+                        "w-8 h-8 rounded-full border-2 transition-all duration-150 hover:scale-110",
+                        newBoardColorPalette.includes(color)
+                          ? "border-brand-400 ring-2 ring-brand-400/50 scale-110"
+                          : "border-surface-border hover:border-white/40"
+                      )}
+                      style={{ backgroundColor: color }}
                     />
-                    <span className="text-sm text-white">Private</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="privacy"
-                      checked={boardPrivacy}
-                      onChange={() => setBoardPrivacy(true)}
-                      className="w-4 h-4 text-brand-500 focus:ring-brand-500"
-                    />
-                    <span className="text-sm text-white">Public</span>
-                  </label>
+                  ))}
                 </div>
-                <p className="text-xs text-text-muted mt-1">
-                  {boardPrivacy ? "Anyone can view this board" : "Only you can view this board"}
-                </p>
+                {newBoardColorPalette.length > 0 && (
+                  <div className="flex items-center gap-2 mt-3">
+                    <span className="text-xs text-text-muted">Selected:</span>
+                    {newBoardColorPalette.map(c => (
+                      <div key={c} className="w-5 h-5 rounded-full border border-surface-border" style={{ backgroundColor: c }} title={c} />
+                    ))}
+                    <button
+                      type="button"
+                      className="text-xs text-text-muted hover:text-white ml-auto transition-colors"
+                      onClick={() => setNewBoardColorPalette([])}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                )}
               </div>
-              </div>
+
               <div className="flex gap-3 pt-4">
                 <Button variant="ghost" onClick={() => setShowEdit(false)} className="flex-1">Cancel</Button>
                 <Button onClick={updateBoard} className="flex-1">Update Board</Button>
@@ -712,15 +767,9 @@ export default function StyleBoardsPage() {
                 <div className="flex gap-2 mb-3">
                   {selectedBoard.tags.map((tag) => <Badge key={tag} variant="brand">{tag}</Badge>)}
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="p-3 rounded-lg bg-surface border border-surface-border">
-                    <p className="text-text-muted mb-1">Items</p>
-                    <p className="font-semibold text-white">{selectedBoard.saveCount}</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-surface border border-surface-border">
-                    <p className="text-text-muted mb-1">Visibility</p>
-                    <p className="font-semibold text-white">{selectedBoard.isPublic ? "Public" : "Private"}</p>
-                  </div>
+                <div className="p-3 rounded-lg bg-surface border border-surface-border text-sm inline-block">
+                  <p className="text-text-muted mb-1">Items</p>
+                  <p className="font-semibold text-white">{selectedBoard.saveCount}</p>
                 </div>
               </div>
 

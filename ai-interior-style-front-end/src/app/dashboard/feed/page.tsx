@@ -3,10 +3,11 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
-import { Search, SlidersHorizontal, Heart, MessageCircle, X, Filter, FolderHeart } from "lucide-react";
+import { Search, SlidersHorizontal, Heart, MessageCircle, X, Filter, FolderHeart, UserPlus, UserMinus } from "lucide-react";
 import { STYLE_TAGS, ROOM_TYPES, cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
 import toast from "react-hot-toast";
+import { useAppStore } from "@/lib/store";
 
 interface FeedItem {
   id: string;
@@ -23,6 +24,7 @@ interface FeedItem {
       lastName: string;
       profilePicture?: string;
     };
+    isFollowing?: boolean;
   };
   likeCount: number;
   commentCount: number;
@@ -32,9 +34,12 @@ interface FeedItem {
 }
 
 export default function FeedPage() {
+  const { user } = useAppStore();
   const [search, setSearch] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
   const [roomFilter, setRoomFilter] = useState("");
+  const [followingOnly, setFollowingOnly] = useState(false);
+  const [likesOnly, setLikesOnly] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,14 +51,19 @@ export default function FeedPage() {
   const [selectedBoard, setSelectedBoard] = useState<string | null>(null);
 
   useEffect(() => {
-    loadFeed();
+    loadFeed(1);
     loadBoards();
-  }, [search, styleFilter, roomFilter]);
+  }, [search, styleFilter, roomFilter, followingOnly, likesOnly]);
 
   const loadFeed = async (pageNum = 1) => {
     try {
       setLoading(true);
-      const response = await apiClient.getFeed(pageNum, 20);
+      const response = await apiClient.getFeed({
+        page: pageNum,
+        limit: 20,
+        followingOnly,
+        likesOnly
+      });
       
       // Backend returns { feed: [...], pagination: {...} }
       // API client returns data directly, not wrapped in .data
@@ -156,6 +166,31 @@ export default function FeedPage() {
     }
   };
 
+  const toggleFollow = async (designerId: string, currentlyFollowing: boolean) => {
+    if (!user) {
+      toast.error("Please login to follow designers");
+      return;
+    }
+
+    try {
+      if (currentlyFollowing) {
+        await apiClient.unfollowDesigner(designerId);
+        toast.success("Unfollowed designer");
+      } else {
+        await apiClient.followDesigner(designerId);
+        toast.success("Following designer!");
+      }
+      
+      setFeedItems(prev => prev.map(item => 
+        item.designerId._id === designerId 
+          ? { ...item, designerId: { ...item.designerId, isFollowing: !currentlyFollowing } }
+          : item
+      ));
+    } catch (error: any) {
+      toast.error(error.error || error.message || "Failed to update follow status");
+    }
+  };
+
   const filtered = feedItems.filter((item) => {
     if (styleFilter && item.metadata.style !== styleFilter) return false;
     if (roomFilter && item.metadata.roomType !== roomFilter) return false;
@@ -172,10 +207,28 @@ export default function FeedPage() {
           <h1 className="font-display text-3xl font-bold text-white mb-1">Discover Feed</h1>
           <p className="text-text-muted text-sm">Personalized designs based on your style preferences</p>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => setFilterOpen(!filterOpen)}>
-          <SlidersHorizontal className="w-4 h-4" /> Filters
-          {(styleFilter || roomFilter) && <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant={followingOnly ? "brand" : "ghost"} 
+            size="sm" 
+            onClick={() => setFollowingOnly(!followingOnly)}
+            className="text-xs"
+          >
+            <UserPlus className="w-3.5 h-3.5 mr-1" /> Following
+          </Button>
+          <Button 
+            variant={likesOnly ? "brand" : "ghost"} 
+            size="sm" 
+            onClick={() => setLikesOnly(!likesOnly)}
+            className="text-xs"
+          >
+            <Heart className="w-3.5 h-3.5 mr-1" /> My Likes
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setFilterOpen(!filterOpen)}>
+            <SlidersHorizontal className="w-4 h-4" /> Filters
+            {(styleFilter || roomFilter) && <span className="w-1.5 h-1.5 rounded-full bg-brand-500" />}
+          </Button>
+        </div>
       </div>
 
       {/* Search */}
@@ -230,12 +283,30 @@ export default function FeedPage() {
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               <div className="absolute bottom-0 left-0 right-0 p-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-white">{designerName}</p>
-                    <div className="flex gap-1 mt-0.5">
-                      <Badge variant="brand">{item.metadata.style}</Badge>
-                      <Badge variant="gray">{item.metadata.roomType}</Badge>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-white truncate max-w-[120px]">{designerName}</p>
+                      <div className="flex gap-1 mt-0.5">
+                        <Badge variant="brand" className="text-[8px] py-0 px-1">{item.metadata.style}</Badge>
+                      </div>
                     </div>
+                    {user?.id !== item.designerId._id && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFollow(item.designerId._id, !!item.designerId.isFollowing);
+                        }}
+                        className={cn(
+                          "p-1.5 rounded-lg transition-all",
+                          item.designerId.isFollowing 
+                            ? "bg-brand-500/20 text-brand-400 border border-brand-500/30" 
+                            : "bg-white/10 text-white hover:bg-brand-500 hover:text-white"
+                        )}
+                        title={item.designerId.isFollowing ? "Unfollow" : "Follow"}
+                      >
+                        {item.designerId.isFollowing ? <UserMinus className="w-3.5 h-3.5" /> : <UserPlus className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => toggleLike(item.id, item.isLiked)} className={cn("flex items-center gap-1 text-xs transition-colors", item.isLiked ? "text-pink-400" : "text-white/70 hover:text-pink-400")}>
@@ -243,9 +314,6 @@ export default function FeedPage() {
                     </button>
                     <button onClick={() => openSaveModal(item)} className={cn("flex items-center gap-1 text-xs transition-colors", item.isSaved ? "text-blue-400" : "text-white/70 hover:text-blue-400")}>
                       <FolderHeart className={cn("w-4 h-4", item.isSaved && "fill-blue-400")} />
-                    </button>
-                    <button className="flex items-center gap-1 text-xs text-white/70 hover:text-blue-400 transition-colors">
-                      <MessageCircle className="w-4 h-4" />{item.commentCount}
                     </button>
                   </div>
                 </div>
