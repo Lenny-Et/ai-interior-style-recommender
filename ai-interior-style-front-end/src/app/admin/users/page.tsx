@@ -8,8 +8,9 @@ import Avatar from "@/components/ui/Avatar";
 import {
   Users, Search, CheckCircle, Shield, Ban,
   ChevronUp, ChevronDown, MoreHorizontal, Star,
-  Loader2, RefreshCw,
+  Loader2, RefreshCw, Info, X
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { formatDate, cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
 
@@ -58,13 +59,14 @@ export default function UserManagementPage() {
   const [sortDir, setSortDir] = useState<"asc"|"desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
+  const [showGuidelines, setShowGuidelines] = useState(false);
 
   const fetchUsers = useCallback(async (page = 1, searchQuery = "", role = "all", status = "all", sort = "joined", order = "desc") => {
     try {
       setLoading(true);
       setError(null);
       const response = await apiClient.getAdminUsers(page, 20, role === "all" ? undefined : role, searchQuery || undefined);
-      console.log('API Response:', response); // Debug log
+      console.log('API Response:', response);
       setUsers((response as any)?.users || []);
       setTotalUsers((response as any)?.pagination?.total || 0);
       setCurrentPage(page);
@@ -77,12 +79,10 @@ export default function UserManagementPage() {
     }
   }, []);
 
-  // Initial load
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
 
-  // Debounced search and filter
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       fetchUsers(1, search, roleFilter, statusFilter, sortField, sortDir);
@@ -127,7 +127,6 @@ export default function UserManagementPage() {
 
   const toggleVerification = async (userId: string, currentVerified: boolean) => {
     try {
-      // This would need a specific endpoint for verification toggle
       await apiClient.updateUserStatus(userId, currentVerified ? 'unverified' : 'verified');
       setUsers((prev) => prev.map((u) => 
         u._id === userId ? { ...u, is_verified: !currentVerified } : u
@@ -171,15 +170,21 @@ export default function UserManagementPage() {
           <Button 
             variant="ghost" 
             size="sm" 
+            onClick={() => setShowGuidelines(true)}
+            className="flex items-center gap-2"
+          >
+            <Info className="w-4 h-4" /> Guidelines
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm" 
             onClick={() => fetchUsers()}
-            className="ml-auto"
           >
             <RefreshCw className="w-4 h-4" />
           </Button>
         </div>
       </div>
 
-      {/* Loading state */}
       {loading && (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-6 h-6 animate-spin text-brand-400 mr-2" />
@@ -187,7 +192,6 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* Error state */}
       {!loading && error && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
           <p className="text-red-400 text-sm mb-2">{error}</p>
@@ -197,7 +201,6 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* Filters */}
       {!loading && !error && (
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
@@ -232,7 +235,6 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      {/* Users table */}
       {!loading && !error && (
         <Card>
           <table className="data-table">
@@ -329,13 +331,89 @@ export default function UserManagementPage() {
             </tbody>
           </table>
           
-          {/* Pagination info */}
           <div className="flex items-center justify-between p-4 text-xs text-text-muted border-t border-surface-border">
             <span>Showing {users.length} of {totalUsers} users</span>
             <span>Page {currentPage}</span>
           </div>
         </Card>
       )}
+
+      <GuidelinesModal show={showGuidelines} onClose={() => setShowGuidelines(false)} />
     </div>
+  );
+}
+
+function GuidelinesModal({ show, onClose }: { show: boolean, onClose: () => void }) {
+  return (
+    <AnimatePresence>
+      {show && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+          />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="relative w-full max-w-2xl bg-surface-card rounded-2xl border border-surface-border p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-display text-2xl font-bold text-white flex items-center gap-2">
+                <Shield className="w-6 h-6 text-brand-400" /> Designer Evaluation Standards
+              </h2>
+              <button onClick={onClose} className="text-text-muted hover:text-white transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <section>
+                <h3 className="text-brand-400 font-semibold mb-2 flex items-center gap-2">
+                  <Star className="w-4 h-4" /> 1. Portfolio Quality
+                </h3>
+                <ul className="list-disc list-inside text-sm text-text-muted space-y-1 ml-2">
+                  <li>Minimum 3 high-resolution project showcases.</li>
+                  <li>Clear demonstration of interior design principles (lighting, balance, texture).</li>
+                  <li>Originality check (not just stock photos).</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-gold-400 font-semibold mb-2 flex items-center gap-2">
+                  <Users className="w-4 h-4" /> 2. Professionalism
+                </h3>
+                <ul className="list-disc list-inside text-sm text-text-muted space-y-1 ml-2">
+                  <li>Valid Company Name or Professional Portfolio link (Behance/Personal Site).</li>
+                  <li>Professional bio describing their specialty and experience.</li>
+                  <li>Responsive communication (if applicable).</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-blue-400 font-semibold mb-2 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" /> 3. Verification Levels
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  <div className="p-3 rounded-xl bg-surface border border-surface-border">
+                    <p className="text-xs font-bold text-white mb-1">Standard Check</p>
+                    <p className="text-[10px] text-text-muted">Email verified & Basic profile complete.</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-brand-600/10 border border-brand-500/30">
+                    <p className="text-xs font-bold text-brand-400 mb-1">Homitify Verified</p>
+                    <p className="text-[10px] text-brand-400/80">Portfolio reviewed by Admin. Eligible for featured list.</p>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <Button className="w-full mt-8" onClick={onClose}>Got it, thanks!</Button>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 }

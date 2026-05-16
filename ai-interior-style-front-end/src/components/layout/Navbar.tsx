@@ -1,6 +1,6 @@
 "use client";
 import { useAppStore } from "@/lib/store";
-import { Bell, Menu, Search, Moon, Sun, Sparkles, Command } from "lucide-react";
+import { Bell, Menu, Search, Moon, Sun, Command } from "lucide-react";
 import Link from "next/link";
 import Avatar from "@/components/ui/Avatar";
 import { useState } from "react";
@@ -24,11 +24,8 @@ export default function Navbar() {
       </button>
 
       <Link href="/" className="flex items-center gap-2 mr-4">
-        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-600 to-violet-600 flex items-center justify-center shadow-glow-sm">
-          <Sparkles className="w-3.5 h-3.5 text-white" />
-        </div>
         <span className="font-display font-bold text-white text-lg hidden sm:block">
-          Aura<span className="gradient-text">.</span>
+          Homitify<span className="gradient-text">.</span>
         </span>
       </Link>
 

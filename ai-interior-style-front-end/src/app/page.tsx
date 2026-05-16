@@ -5,9 +5,11 @@ import Image from "next/image";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import {
-  Sparkles, ArrowRight, Star, Play, ChevronRight,
+  Sparkles, ArrowRight, Star, Play, ChevronRight, X, Sun, Moon,
   Palette, Zap, Users, Shield, CheckCircle, Clock, Upload, MousePointer,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useAppStore } from "@/lib/store";
 
 const BEFORE_AFTER = [
   {
@@ -50,7 +52,9 @@ const QUIZ_STYLES = [
 ];
 
 export default function LandingPage() {
+  const { theme, setTheme } = useAppStore();
   const [activeBA, setActiveBA] = useState(0);
+  const [showDemo, setShowDemo] = useState(false);
   const [quizStep, setQuizStep] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -61,25 +65,29 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface text-white">
+    <div className="min-h-screen bg-surface text-text">
       {/* ─── Nav ──────────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 border-b border-surface-border bg-surface/80 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-violet-600 flex items-center justify-center shadow-glow-sm">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-display font-bold text-white text-xl">
-              Aura<span className="gradient-text">.</span>
+            <span className="font-display font-bold text-text-heading text-xl">
+              Homitify<span className="gradient-text">.</span>
             </span>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-text-muted">
-            <Link href="#features"  className="hover:text-white transition-colors">Features</Link>
-            <Link href="#quiz"      className="hover:text-white transition-colors">Style Quiz</Link>
-            <Link href="#gallery"   className="hover:text-white transition-colors">Gallery</Link>
-            <Link href="/auth/login"className="hover:text-white transition-colors">Sign In</Link>
+            <Link href="#features"  className="hover:text-brand-600 transition-colors">Features</Link>
+            <Link href="#quiz"      className="hover:text-brand-600 transition-colors">Style Quiz</Link>
+            <Link href="#gallery"   className="hover:text-brand-600 transition-colors">Gallery</Link>
+            <Link href="/auth/login"className="hover:text-brand-600 transition-colors">Sign In</Link>
           </nav>
           <div className="flex items-center gap-2">
+            <button
+              id="theme-toggle-landing"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="p-2 rounded-lg text-text-muted hover:text-brand-500 hover:bg-surface-hover transition-all mr-2"
+            >
+              {theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
             <Link href="/auth/login">
               <Button variant="ghost" size="sm">Sign In</Button>
             </Link>
@@ -99,9 +107,9 @@ export default function LandingPage() {
 
         <div className="relative max-w-7xl mx-auto text-center">
           <Badge variant="brand" className="mb-6 animate-fade-in">
-            <Sparkles className="w-3 h-3" /> Powered by Gemini AI
+            <Sparkles className="w-3 h-3" /> AI-Powered Interior Design
           </Badge>
-          <h1 className="font-display text-5xl sm:text-6xl md:text-7xl font-bold leading-tight mb-6 animate-slide-up">
+          <h1 className="font-display text-5xl sm:text-6xl md:text-7xl font-bold leading-tight mb-6 animate-slide-up text-text-heading">
             Design Your Dream
             <br />
             <span className="gradient-text">Space with AI</span>
@@ -116,7 +124,10 @@ export default function LandingPage() {
                 Start for Free <ArrowRight className="w-4 h-4" />
               </Button>
             </Link>
-            <button className="flex items-center gap-2 text-sm text-text-muted hover:text-white transition-colors">
+            <button 
+              onClick={() => setShowDemo(true)}
+              className="flex items-center gap-2 text-sm text-text-muted hover:text-brand-600 transition-colors"
+            >
               <div className="w-9 h-9 rounded-full border border-surface-border flex items-center justify-center bg-surface-card hover:border-brand-500 transition-colors">
                 <Play className="w-3.5 h-3.5 text-brand-400 ml-0.5" />
               </div>
@@ -305,18 +316,50 @@ export default function LandingPage() {
       {/* ─── Footer ─────────────────────────────────────────────────────────── */}
       <footer className="border-t border-surface-border py-10 px-4 text-center text-sm text-text-muted">
         <div className="flex items-center justify-center gap-2 mb-4">
-          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-brand-600 to-violet-600 flex items-center justify-center">
-            <Sparkles className="w-3 h-3 text-white" />
-          </div>
-          <span className="font-display font-bold text-white">Aura Interiors</span>
+          <span className="font-display font-bold text-white">Homitify</span>
         </div>
         <div className="flex flex-wrap justify-center gap-5 mb-4">
           <Link href="/auth/login" className="hover:text-white transition-colors">Sign In</Link>
           <Link href="/auth/register" className="hover:text-white transition-colors">Get Started</Link>
           <Link href="/dashboard/designers" className="hover:text-white transition-colors">Find Designers</Link>
         </div>
-        <p>© {new Date().getFullYear()} Aura Interiors. All rights reserved.</p>
+        <p>© {new Date().getFullYear()} Homitify. All rights reserved.</p>
       </footer>
+
+      {/* ─── Watch Demo Modal ─────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showDemo && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowDemo(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-4xl aspect-video bg-surface-card rounded-2xl border border-surface-border overflow-hidden shadow-2xl"
+            >
+              <button
+                onClick={() => setShowDemo(false)}
+                className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <iframe
+                className="w-full h-full"
+                src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1" // Placeholder video, you can replace with a real demo
+                title="Homitify Demo"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

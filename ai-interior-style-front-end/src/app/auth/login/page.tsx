@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import { Sparkles, Mail, Lock, Eye, EyeOff, ArrowRight, Github, Chrome } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { useAppStore } from "@/lib/store";
@@ -34,10 +34,7 @@ export default function LoginPage() {
         <div className="orb orb-brand w-96 h-96 -top-24 -left-24 opacity-60 absolute" />
         <div className="orb orb-violet w-72 h-72 bottom-0 right-0 opacity-40 absolute" />
         <div className="relative text-center">
-          <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-brand-600 to-violet-600 flex items-center justify-center mx-auto mb-8 shadow-glow animate-float">
-            <Sparkles className="w-10 h-10 text-white" />
-          </div>
-          <h1 className="font-display text-5xl font-bold text-white mb-4">Aura<span className="gradient-text">.</span></h1>
+          <h1 className="font-display text-5xl font-bold text-white mb-4">Homitify<span className="gradient-text">.</span></h1>
           <p className="text-text-muted text-lg leading-relaxed max-w-sm">
             AI-powered interior design that transforms your space from ordinary to extraordinary.
           </p>
@@ -59,29 +56,13 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-600 to-violet-600 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-display font-bold text-white text-xl">Aura<span className="gradient-text">.</span></span>
+            <span className="font-display font-bold text-white text-xl">Homitify<span className="gradient-text">.</span></span>
           </div>
 
           <h2 className="font-display text-3xl font-bold text-white mb-1">Welcome back</h2>
           <p className="text-text-muted text-sm mb-8">Sign in to continue to your dashboard</p>
 
-          {/* Social */}
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            <button className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-surface-border text-sm text-text-muted hover:border-brand-500/60 hover:text-white transition-all bg-surface-card">
-              <Chrome className="w-4 h-4" /> Google
-            </button>
-            <button className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-surface-border text-sm text-text-muted hover:border-brand-500/60 hover:text-white transition-all bg-surface-card">
-              <Github className="w-4 h-4" /> GitHub
-            </button>
-          </div>
 
-          <div className="relative mb-6">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-surface-border" /></div>
-            <div className="relative flex justify-center"><span className="bg-surface px-3 text-xs text-text-muted">or continue with email</span></div>
-          </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
