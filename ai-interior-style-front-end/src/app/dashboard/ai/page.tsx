@@ -8,6 +8,7 @@ import Card from "@/components/ui/Card";
 import {
   Sparkles, Upload, X, CheckCircle, ArrowRight,
   Heart, Share2, Download, RefreshCw, Eye, Star,
+  Clock, History
 } from "lucide-react";
 import { STYLE_TAGS, ROOM_TYPES, BUDGET_RANGES, cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -45,6 +46,27 @@ export default function AIRecommenderPage() {
   const [savedRecommendations, setSavedRecommendations] = useState<any[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentLimitType, setCurrentLimitType] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+
+  const loadSessionFromHistory = (session: any) => {
+    setRecommendations(session.recommendations || []);
+    setCurrentSessionId(session.sessionId);
+    
+    // Set preview image
+    if (session.imageUrl) {
+      setPreview(session.imageUrl);
+    }
+    
+    // Set preferences
+    if (session.metadata) {
+      setRoomType(session.metadata.roomType || "Living Room");
+      setBudget(session.metadata.budget || "$1,000–$2,500");
+      setStyles(session.metadata.styles || []);
+    }
+    
+    setStep("results");
+    setShowHistory(false);
+  };
 
   const onDrop = useCallback((files: File[]) => {
     const file = files[0];
@@ -320,11 +342,59 @@ export default function AIRecommenderPage() {
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="font-display text-3xl font-bold text-white mb-1 flex items-center gap-2">
-          <Sparkles className="w-7 h-7 text-brand-400" /> AI Recommender
-        </h1>
-        <p className="text-text-muted text-sm">Upload a room photo and get personalized furniture sets in seconds.</p>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="font-display text-3xl font-bold text-white mb-1 flex items-center gap-2">
+            <Sparkles className="w-7 h-7 text-brand-400" /> AI Recommender
+          </h1>
+          <p className="text-text-muted text-sm">Upload a room photo and get personalized furniture sets in seconds.</p>
+        </div>
+
+        {savedRecommendations.length > 0 && (
+          <div className="relative">
+            <Button variant="outline" onClick={() => setShowHistory(!showHistory)}>
+              <Clock className="w-4 h-4 mr-2" /> History
+            </Button>
+            {showHistory && (
+              <div className="absolute right-0 top-full mt-2 w-72 bg-surface border border-surface-border rounded-xl shadow-xl z-50 max-h-96 overflow-y-auto">
+                <div className="p-3 border-b border-surface-border flex justify-between items-center sticky top-0 bg-surface/90 backdrop-blur z-10">
+                  <h3 className="font-semibold text-white">Past Generations</h3>
+                  <button onClick={() => setShowHistory(false)}><X className="w-4 h-4 text-text-muted hover:text-white" /></button>
+                </div>
+                <div className="p-2 space-y-1">
+                  {savedRecommendations.map((session) => (
+                    <button
+                      key={session.sessionId}
+                      onClick={() => loadSessionFromHistory(session)}
+                      className={cn(
+                        "w-full text-left flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-colors",
+                        currentSessionId === session.sessionId && "bg-brand-500/10 border border-brand-500/30"
+                      )}
+                    >
+                      {session.imageUrl ? (
+                        <div className="w-12 h-12 rounded object-cover flex-shrink-0 bg-surface-card overflow-hidden">
+                          <img src={session.imageUrl} alt="Session thumbnail" className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded bg-surface-card flex items-center justify-center flex-shrink-0">
+                          <Sparkles className="w-5 h-5 text-text-muted" />
+                        </div>
+                      )}
+                      <div className="overflow-hidden">
+                        <p className="text-sm font-medium text-white truncate">
+                          {session.metadata?.roomType || 'Room'}
+                        </p>
+                        <p className="text-xs text-text-muted truncate">
+                          {new Date(session.createdAt || session.metadata?.generatedAt || new Date()).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Steps indicator */}
@@ -459,9 +529,14 @@ export default function AIRecommenderPage() {
               <h2 className="font-semibold text-white">Your AI Design Sets</h2>
               <p className="text-xs text-text-muted">4 cohesive furniture sets for your {roomType}</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setStep("prefs")}>
-              <RefreshCw className="w-3.5 h-3.5" /> Regenerate
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => { setPreview(null); setUploadedImage(null); setStep("upload"); }}>
+                New Design
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setStep("prefs")}>
+                <RefreshCw className="w-3.5 h-3.5" /> Regenerate
+              </Button>
+            </div>
           </div>
           <div className="grid sm:grid-cols-2 gap-5">
             {recommendations.map((set: AIRecommendation) => (

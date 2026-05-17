@@ -136,6 +136,12 @@ router.post('/verify', async (req, res) => {
       return res.json({ success: true, status: 'held_in_escrow', transaction: tx });
     } else {
       // Payment failed or is still pending
+      const tx = await Transaction.findOne({ tx_ref });
+      if (tx && tx.status === 'pending') {
+        tx.status = 'failed';
+        tx.webhookData = verification.data || {};
+        await tx.save();
+      }
       return res.status(400).json({ success: false, error: 'Payment not successful', details: verification.data });
     }
   } catch (error) {

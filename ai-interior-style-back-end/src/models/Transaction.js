@@ -6,7 +6,7 @@ const transactionSchema = new mongoose.Schema({
   amount: { type: Number, required: true }, // Total amount paid by homeowner
   currency: { type: String, default: 'ETB' },
   tx_ref: { type: String, required: true, unique: true },
-  status: { type: String, enum: ['pending', 'held_in_escrow', 'released_to_designer', 'refunded'], default: 'pending' },
+  status: { type: String, enum: ['pending', 'held_in_escrow', 'released_to_designer', 'refunded', 'failed'], default: 'pending' },
   projectStatus: { type: String, enum: ['in_progress', 'completed'], default: 'in_progress' },
   commissionAmount: { type: Number, default: 0 },
   designerPayout: { type: Number, default: 0 },

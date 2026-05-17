@@ -244,10 +244,15 @@ router.get('/recommendations', authenticateToken, async (req, res) => {
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
 
-    // This would come from a recommendations model - for now, return mock data
-    const recommendations = await getUserRecommendations(userId, skip, limitNum);
+    const { AIRecommendation } = await import('../models/AIRecommendation.js');
+    const normalizedUserId = userId.toString();
 
-    const total = await getUserRecommendationsCount(userId);
+    const recommendations = await AIRecommendation.find({ userId: normalizedUserId, status: 'active' })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    const total = await AIRecommendation.countDocuments({ userId: normalizedUserId, status: 'active' });
 
     res.json({
       recommendations,

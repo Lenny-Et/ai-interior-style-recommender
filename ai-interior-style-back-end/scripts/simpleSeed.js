@@ -59,7 +59,7 @@ async function ultraSeed() {
       }).save();
       designers.push(d);
     }
-
+11
     // 3. Seed 50 Portfolio Items
     console.log('🎨 Seeding 50 Portfolio Items...');
     const allPortfolios = [];
