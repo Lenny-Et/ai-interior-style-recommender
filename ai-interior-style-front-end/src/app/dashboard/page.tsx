@@ -39,7 +39,7 @@ export default function HomeownerDashboard() {
       const userId = user?.id || localStorage.getItem('userId') || '';
       
       const [designersRes, aiRes, boardsRes, requestsRes] = await Promise.all([
-        apiClient.getDesigners({ limit: 3, sort: 'rating' }),
+        apiClient.getDesigners({ limit: 3, sortBy: 'rating' }),
         apiClient.getSavedAIRecommendations(userId, 1, 3),
         apiClient.getBoards(1, 1),
         apiClient.getCustomRequests(1, 1)

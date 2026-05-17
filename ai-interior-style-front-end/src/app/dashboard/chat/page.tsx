@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
@@ -59,6 +59,11 @@ interface CustomRequest {
     };
     message: string;
     createdAt: string;
+    attachments?: Array<{
+      url: string;
+      filename: string;
+      originalName: string;
+    }>;
   }>;
 }
 
@@ -96,12 +101,30 @@ export default function ChatPage() {
   const [premiumStatus, setPremiumStatus] = useState<any>(null);
   const [checkingPremium, setCheckingPremium] = useState(true);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null); // Ref for auto-scrolling
+
+  const filteredRequests = requests.filter(request => {
+    const matchesSearch = request.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         request.designerId?.profile.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         request.designerId?.profile.lastName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || request.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const ticket = filteredRequests.find((r) => r._id === active);
 
   useEffect(() => {
     checkPremiumStatus();
     loadRequests();
     loadDesigners();
   }, []);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollTop = messagesEndRef.current.scrollHeight;
+    }
+  }, [ticket?.messages]);
 
   const checkPremiumStatus = async () => {
     try {
@@ -188,27 +211,52 @@ export default function ChatPage() {
         toast.error("Only homeowners can approve payments");
         return;
       }
-      
-      const response = await apiClient.initializePayment({
-        amount: budget,
-        email: user.email,
-        firstName: user.profile.firstName,
-        lastName: user.profile.lastName || 'User',
-        homeownerId: user.id,
-        designerId: designerId,
-        sessionId: requestId
-      });
-      
-      const paymentData = (response as any).data || response;
-      if (paymentData.checkoutUrl) {
-        localStorage.setItem(`payment_${requestId}`, paymentData.tx_ref);
-        window.location.href = paymentData.checkoutUrl;
+
+      // First, check if there's an existing transaction for this session and its status
+      let currentTransaction = null;
+      try {
+        const txResponse = await apiClient.getTransactionBySessionId(requestId);
+        currentTransaction = (txResponse as any).transaction;
+      } catch (error) {
+        console.warn('No existing transaction found for this request, proceeding with new payment initialization.');
+      }
+
+      if (currentTransaction && currentTransaction.status === 'held_in_escrow') {
+        // Funds are already in escrow, so homeowner is approving release
+        toast.loading('Approving project and releasing funds...');
+        const releaseResponse = await apiClient.completeProject(currentTransaction.tx_ref);
+        if ((releaseResponse as any).message === 'Funds released to designer') {
+          toast.success('Project approved and funds released to designer!');
+          loadRequests(); // Refresh requests to update status
+        } else {
+          toast.error('Failed to release funds.');
+        }
       } else {
-        toast.error("Payment initialization failed - no checkout URL received");
+        // No existing escrowed transaction, or transaction is not in escrow, so initiate new payment
+        toast.loading('Initializing secure payment...');
+        const response = await apiClient.initializePayment({
+          amount: budget,
+          email: user.email,
+          firstName: user.profile.firstName,
+          lastName: user.profile.lastName || 'User',
+          homeownerId: user.id,
+          designerId: designerId,
+          sessionId: requestId
+        });
+        
+        const paymentData = (response as any).data || response;
+        if (paymentData.checkoutUrl) {
+          toast.success('Redirecting to secure payment page...');
+          localStorage.setItem(`payment_${requestId}`, paymentData.tx_ref);
+          window.location.href = paymentData.checkoutUrl;
+        } else {
+          toast.dismiss(); // Remove loading toast
+          toast.error("Payment initialization failed - no checkout URL received");
+        }
       }
     } catch (error: any) {
-      console.error('Payment error:', error);
-      toast.error(error.error || error.message || "Failed to process payment");
+      console.error('Payment/Release error:', error);
+      toast.error(error.error || error.message || "Failed to process payment or release funds");
     } finally {
       setIsProcessingPayment(false);
     }
@@ -280,16 +328,6 @@ export default function ChatPage() {
       }
     }
   };
-
-  const filteredRequests = requests.filter(request => {
-    const matchesSearch = request.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         request.designerId?.profile.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         request.designerId?.profile.lastName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || request.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  const ticket = filteredRequests.find((r) => r._id === active);
 
   if (checkingPremium) {
     return (
@@ -527,35 +565,40 @@ export default function ChatPage() {
                 </Badge>
               </div>
             </CardHeader>
-            <CardBody className="flex-1 flex flex-col space-y-4">
-              {/* Project Brief */}
-              <div>
-                <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Project Brief</p>
-                <p className="text-sm text-purple-100 leading-relaxed">{ticket.description}</p>
+            <CardBody className="flex-1 flex flex-col space-y-4 overflow-hidden">
+              {/* Project Brief & Attachments (Static/Small) */}
+              <div className="shrink-0 space-y-4">
+                <div>
+                  <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Project Brief</p>
+                  <p className="text-sm text-purple-100 leading-relaxed line-clamp-2 hover:line-clamp-none transition-all cursor-pointer" title="Click to expand">
+                    {ticket.description}
+                  </p>
+                </div>
+
+                {/* Attachments */}
+                {ticket.attachments && ticket.attachments.length > 0 && (
+                  <div>
+                    <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Room Photos</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {ticket.attachments.map((attachment, i) => (
+                        <img
+                          key={i}
+                          src={attachment.url}
+                          alt={attachment.originalName}
+                          className="w-16 h-12 object-cover rounded-lg border border-surface-border hover:opacity-80 cursor-pointer transition-opacity"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Attachments */}
-              {ticket.attachments && ticket.attachments.length > 0 && (
-                <div>
-                  <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Room Photos</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {ticket.attachments.map((attachment, i) => (
-                      <img
-                        key={i}
-                        src={attachment.url}
-                        alt={attachment.originalName}
-                        className="w-24 h-20 object-cover rounded-lg border border-surface-border hover:opacity-80 cursor-pointer transition-opacity"
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Messages */}
-              <div className="flex-1 overflow-y-auto space-y-3 min-h-[200px]">
-                <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Conversation</p>
-                {ticket.messages && ticket.messages.length > 0 ? (
-                  ticket.messages.map((msg, i) => (
+              {/* Messages (Scrollable) */}
+              <div className="flex-1 flex flex-col min-h-0 border-t border-surface-border pt-4">
+                <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-3 shrink-0">Conversation</p>
+                <div ref={messagesEndRef} className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-surface-border">
+                  {ticket.messages && ticket.messages.length > 0 ? (
+                    ticket.messages.map((msg, i) => (
                     <div
                       key={i}
                       className={cn(
@@ -583,7 +626,7 @@ export default function ChatPage() {
                       >
                         {msg.attachments && msg.attachments.length > 0 && (
                           <div className="flex flex-wrap gap-2 mb-2">
-                            {msg.attachments.map((file, idx) => (
+                            {msg.attachments.map((file: any, idx: number) => (
                               <img key={idx} src={file.url} alt="attachment" className="w-32 h-32 object-cover rounded-xl" />
                             ))}
                           </div>
@@ -607,6 +650,7 @@ export default function ChatPage() {
                     <p className="text-sm">No messages yet. Start the conversation!</p>
                   </div>
                 )}
+                </div>
               </div>
 
               {/* Review Banner */}

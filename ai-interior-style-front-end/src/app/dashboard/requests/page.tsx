@@ -219,41 +219,65 @@ export default function RequestsPage() {
     try {
       setIsProcessingPayment(true);
       
-      // Get authenticated user from store
       const { user } = useAppStore.getState();
       if (!user || user.role !== 'homeowner') {
         toast.error("Only homeowners can approve payments");
         return;
       }
       
-      const userId = user.id;
-      const userEmail = user.email;
-      const userName = `${user.profile.firstName} ${user.profile.lastName}`;
-      
-      // Initialize payment for designer services
-      const response = await apiClient.initializePayment({
-        amount: budget,
-        email: userEmail,
-        firstName: userName.split(' ')[0],
-        lastName: userName.split(' ')[1] || 'User',
-        homeownerId: userId,
-        designerId: designerId,
-        sessionId: requestId // Use sessionId for tracking request ID
-      });
-      
-      const paymentData = (response as any).data || response;
-      
-      // Redirect to Chapa payment page
-      if (paymentData.checkoutUrl) {
-        // Store transaction reference for verification
-        localStorage.setItem(`payment_${requestId}`, paymentData.tx_ref);
-        window.location.href = paymentData.checkoutUrl;
+      // First, check if there's an existing transaction for this session and its status
+      let currentTransaction = null;
+      try {
+        const txResponse = await apiClient.getTransactionBySessionId(requestId);
+        currentTransaction = (txResponse as any).transaction;
+      } catch (error) {
+        console.warn('No existing transaction found for this request, proceeding with new payment initialization.');
+      }
+
+      if (currentTransaction && currentTransaction.status === 'held_in_escrow') {
+        // Funds are already in escrow, so homeowner is approving release
+        toast.loading('Approving project and releasing funds...');
+        const releaseResponse = await apiClient.completeProject(currentTransaction.tx_ref);
+        if ((releaseResponse as any).message === 'Funds released to designer') {
+          toast.success('Project approved and funds released to designer!');
+          loadRequests(); // Refresh requests to update status
+        } else {
+          toast.error('Failed to release funds.');
+        }
       } else {
-        toast.error("Payment initialization failed - no checkout URL received");
+        // No existing escrowed transaction, or transaction is not in escrow, so initiate new payment
+        const userId = user.id;
+        const userEmail = user.email;
+        const userName = `${user.profile.firstName} ${user.profile.lastName}`;
+        
+        toast.loading('Initializing secure payment...');
+        // Initialize payment for designer services
+        const response = await apiClient.initializePayment({
+          amount: budget,
+          email: userEmail,
+          firstName: userName.split(' ')[0],
+          lastName: userName.split(' ')[1] || 'User',
+          homeownerId: userId,
+          designerId: designerId,
+          sessionId: requestId // Use sessionId for tracking request ID
+        });
+        
+        const paymentData = (response as any).data || response;
+        
+        // Redirect to Chapa payment page
+        if (paymentData.checkoutUrl) {
+          toast.success('Redirecting to secure payment page...');
+          // Store transaction reference for verification
+          localStorage.setItem(`payment_${requestId}`, paymentData.tx_ref);
+          window.location.href = paymentData.checkoutUrl;
+        } else {
+          toast.dismiss(); // Remove loading toast
+          toast.error("Payment initialization failed - no checkout URL received");
+        }
       }
     } catch (error: any) {
-      console.error('Payment error:', error);
-      toast.error(error.error || error.message || "Failed to process payment");
+      console.error('Payment/Release error:', error);
+      toast.error(error.error || error.message || "Failed to process payment or release funds");
     } finally {
       setIsProcessingPayment(false);
     }
