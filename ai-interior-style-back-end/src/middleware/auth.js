@@ -29,14 +29,22 @@ export const requireRole = (role) => {
   };
 };
 
-export const requireVerifiedDesigner = (req, res, next) => {
+export const requireApprovedDesigner = (req, res, next) => {
   if (req.user && req.user.role === 'designer') {
-    if (req.user.is_verified) {
+    if (req.user.approvalStatus === 'approved') {
       next();
     } else {
-      res.status(403).json({ error: 'Access denied: designer account not verified' });
+      res.status(403).json({ error: 'Access denied: designer account not approved' });
     }
   } else {
     res.status(403).json({ error: 'Access denied: must be a designer' });
+  }
+};
+
+export const requireProAccount = (req, res, next) => {
+  if (req.user && req.user.isPro) {
+    next();
+  } else {
+    res.status(403).json({ error: 'Access denied: Pro account required' });
   }
 };

@@ -5,6 +5,9 @@ import { Transaction } from '../models/Transaction.js';
 import { Like } from '../models/Like.js';
 import { Follow } from '../models/Follow.js';
 import { authenticateToken, requireRole } from '../middleware/auth.js';
+import { sendDesignerApprovalEmail, sendDesignerRejectionEmail } from '../services/emailService.js';
+
+
 
 const router = express.Router();
 
@@ -40,7 +43,7 @@ router.get('/users', async (req, res) => {
     }
 
     if (verified !== undefined) {
-      query.is_verified = verified === 'true';
+      query.approvalStatus = verified === 'true' ? 'approved' : 'pending';
     }
 
     if (status) {
@@ -52,7 +55,7 @@ router.get('/users', async (req, res) => {
           query.isBlocked = { $ne: true };
           break;
         case 'pending':
-          query.is_verified = false;
+          query.approvalStatus = 'pending';
           query.role = 'designer';
           break;
       }
@@ -73,10 +76,12 @@ router.get('/users', async (req, res) => {
 
     // Get users with stats
     const users = await User.find(query)
-      .select('-passwordHash')
+      .select('-passwordHash approvalStatus isPro')
+      .lean()
       .sort(sort)
       .skip(skip)
       .limit(limitNum);
+
 
     // Add stats for each user
     const usersWithStats = await Promise.all(
@@ -84,13 +89,15 @@ router.get('/users', async (req, res) => {
         const [portfolioCount, followerCount, transactionCount] = await Promise.all([
           PortfolioItem.countDocuments({ designerId: user._id }),
           Follow.countDocuments({ followingId: user._id }),
-          Transaction.countDocuments({ 
-            $or: [{ homeownerId: user._id }, { designerId: user._id }] 
+          Transaction.countDocuments({
+            $or: [{ homeownerId: user._id }, { designerId: user._id }]
           })
         ]);
 
         return {
-          ...user.toObject(),
+          ...user,
+          approvalStatus: user.approvalStatus,
+          isPro: user.isPro,
           stats: {
             portfolioCount,
             followerCount,
@@ -168,7 +175,7 @@ router.put('/users/:id', async (req, res) => {
     }
 
     // Update allowed fields
-    const allowedFields = ['role', 'is_verified', 'isBlocked', 'profile'];
+    const allowedFields = ['role', 'isBlocked', 'profile', 'approvalStatus', 'is_verified'];
     Object.keys(updates).forEach(key => {
       if (allowedFields.includes(key)) {
         user[key] = updates[key];
@@ -183,6 +190,48 @@ router.put('/users/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Update user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Approve/Reject Designer
+router.put('/users/:id/approve-designer', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { approvalStatus } = req.body; // 'approved' or 'rejected'
+
+    if (!['approved', 'rejected'].includes(approvalStatus)) {
+      return res.status(400).json({ error: 'Invalid approval status provided.' });
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.role !== 'designer') {
+      return res.status(400).json({ error: 'User is not a designer.' });
+    }
+
+    user.approvalStatus = approvalStatus;
+    await user.save();
+
+    const designerName = user.profile?.firstName ? `${user.profile.firstName} ${user.profile.lastName || ''}`.trim() : user.email;
+
+    if (approvalStatus === 'approved') {
+      await sendDesignerApprovalEmail(user.email, designerName);
+    } else if (approvalStatus === 'rejected') {
+      // Assuming a reason can be passed in the request body for rejection
+      const rejectionReason = req.body.rejectionReason || "Your application did not meet our current criteria.";
+      await sendDesignerRejectionEmail(user.email, designerName, rejectionReason);
+    }
+
+    res.json({
+      message: `Designer ${approvalStatus} successfully`,
+      user: user.toJSON()
+    });
+  } catch (error) {
+    console.error('Approve/Reject designer error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

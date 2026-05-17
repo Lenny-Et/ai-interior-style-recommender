@@ -8,13 +8,9 @@ import { Notification } from '../src/models/Notification.js';
 import { SupportTicket } from '../src/models/SupportTicket.js';
 import { Transaction } from '../src/models/Transaction.js';
 
-// Helper function to hash passwords
-const hashPassword = async (password) => {
-  const salt = await bcrypt.genSalt(10);
-  return bcrypt.hash(password, salt);
-};
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://admin:admin123@cluster0.a5dyv4i.mongodb.net/?appName=Cluster0';
+
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://bitanya897_db_user:ept20YDCMPjDGF0y@ac-gvkdhyv-shard-00-00.zxqersl.mongodb.net:27017/test?ssl=true&authSource=admin&retryWrites=true&w=majority';
 
 const styles = ['Minimalist', 'Scandinavian', 'Japandi', 'Industrial', 'Bohemian', 'Modern', 'Art Deco', 'Coastal'];
 const rooms = ['Living Room', 'Kitchen', 'Bedroom', 'Home Office', 'Dining Room', 'Bathroom'];
@@ -33,7 +29,7 @@ async function ultraSeed() {
     // 1. Seed Admin
     const admin = await new User({
       email: 'admin@aura.com',
-      passwordHash: await hashPassword('admin123'),
+      passwordHash: 'admin123',
       role: 'admin',
       is_verified: true,
       profile: { firstName: 'System', lastName: 'Admin', company: 'Aura Interiors' }
@@ -45,7 +41,7 @@ async function ultraSeed() {
     for (let i = 1; i <= 10; i++) {
       const d = await new User({
         email: `designer${i}@aura.com`,
-        passwordHash: await hashPassword('password123'),
+        passwordHash: 'password123',
         role: 'designer',
         is_verified: true,
         profile: {
@@ -68,9 +64,73 @@ async function ultraSeed() {
       const style = styles[i % styles.length];
       const room = rooms[i % rooms.length];
       
+      const imageUrls = [
+        'https://images.unsplash.com/photo-1505693416388-84cd096d1713?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1449844908441-8829872d2607?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1511818966892-d7d671e672a2?auto=format&fit=crop&w=2000&q=80',
+
+        'https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1519643381401-22c77e60520e?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1484101403633-562f891dc89a?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1507089947368-19c1da9775ae?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1516455590571-18256e5bb9ff?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1486304873000-235643847519?auto=format&fit=crop&w=2000&q=80',
+        'https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1505693416388-84cd096d1713?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1900&q=80',
+
+        'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1449844908441-8829872d2607?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1511818966892-d7d671e672a2?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1519643381401-22c77e60520e?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1484101403633-562f891dc89a?auto=format&fit=crop&w=1900&q=80',
+
+        'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1516455590571-18256e5bb9ff?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1486304873000-235643847519?auto=format&fit=crop&w=1900&q=80',
+        'https://images.unsplash.com/photo-1505693416388-84cd096d1713?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=1800&q=80',
+
+        'https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1449844908441-8829872d2607?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1511818966892-d7d671e672a2?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1502005229762-cf1b2da7c5d6?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1519643381401-22c77e60520e?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1484101403633-562f891dc89a?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1516455590571-18256e5bb9ff?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1486304873000-235643847519?auto=format&fit=crop&w=1800&q=80',
+        'https://images.unsplash.com/photo-1505693416388-84cd096d1713?auto=format&fit=crop&w=1700&q=80',
+
+        'https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1700&q=80',
+        'https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1700&q=80',
+        'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=1700&q=80',
+        'https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1700&q=80',
+        'https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&w=1700&q=80',
+        'https://images.unsplash.com/photo-1489515217757-5fd1be406fef?auto=format&fit=crop&w=1700&q=80'
+      ];
+      
       const item = await new PortfolioItem({
         designerId: designer._id,
-        imageUrl: `https://picsum.photos/seed/${i + 100}/800/600`,
+        imageUrl: imageUrls[i],
         cloudinaryId: `seed_asset_${i}`,
         description: `A breathtaking ${style} ${room} masterfully crafted for a premium feel.`,
         metadata: {
