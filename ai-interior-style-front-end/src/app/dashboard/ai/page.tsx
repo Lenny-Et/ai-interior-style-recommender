@@ -7,11 +7,12 @@ import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import {
   Sparkles, Upload, X, CheckCircle, ArrowRight,
-  Heart, Share2, Download, RefreshCw, Eye, Star,
+  Heart, Share2, Download, RefreshCw, Eye, FolderHeart, Plus
 } from "lucide-react";
 import { STYLE_TAGS, ROOM_TYPES, BUDGET_RANGES, cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { apiClient } from "@/lib/api-client";
+import { useAppStore } from "@/lib/store";
 import Link from "next/link";
 
 interface AIRecommendation {
@@ -40,11 +41,18 @@ export default function AIRecommenderPage() {
   const [progress, setProgress] = useState(0);
   const [recommendations, setRecommendations] = useState<AIRecommendation[]>([]);
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  const [unlockedDesigns, setUnlockedDesigns] = useState<string[]>([]);
   const [savedRecommendations, setSavedRecommendations] = useState<any[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [currentLimitType, setCurrentLimitType] = useState<string | null>(null);
+  const [previewRec, setPreviewRec] = useState<AIRecommendation | null>(null);
+  
+  // Board Save State
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [itemToSave, setItemToSave] = useState<AIRecommendation | null>(null);
+  const [userBoards, setUserBoards] = useState<any[]>([]);
+  const [isSavingToBoard, setIsSavingToBoard] = useState<string | null>(null); // boardId loading state
+
+  const { user } = useAppStore();
 
   const onDrop = useCallback((files: File[]) => {
     const file = files[0];
@@ -61,65 +69,79 @@ export default function AIRecommenderPage() {
   const toggleStyle = (s: string) =>
     setStyles((prev) => prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]);
 
-  // Check for existing premium purchases and load paid designs
-  const checkPremiumPurchases = async () => {
-    try {
-      const userId = localStorage.getItem('userId') || '507f1f77bcf86cd799439011';
-
-      const designsResponse = await apiClient.getUserDesigns({ status: 'active', limit: 100, userId });
-      const designs = (designsResponse as any).data?.designs || (designsResponse as any).designs || [];
-
-      // Extract original recommendation IDs stored at purchase time
-      const unlockedIds = designs
-        .map((d: any) => d.designData?.recommendationId)
-        .filter(Boolean);
-
-      setUnlockedDesigns(unlockedIds);
-
-      console.log('Library designs:', designs.length);
-      console.log('Unlocked recommendation IDs:', unlockedIds);
-    } catch (error) {
-      console.error('Failed to check premium purchases:', error);
-    }
-  };
-
-  const unlockPremiumDesign = async (recommendationId: string) => {
-    try {
-      setIsProcessingPayment(true);
-
-      // Get user info for payment - use mock data for testing
-      const userId = localStorage.getItem('userId') || '507f1f77bcf86cd799439011'; // Mock ObjectId
-      const userEmail = localStorage.getItem('userEmail') || 'customer@chapa.co';
-      const userName = localStorage.getItem('userName') || 'Test User';
-
-      // Initialize payment for premium AI design
-      const response = await apiClient.initializePayment({
-        amount: 2999, // $29.99 for premium AI design
-        email: userEmail,
-        firstName: userName.split(' ')[0],
-        lastName: userName.split(' ')[1] || 'User',
-        homeownerId: userId,
-        designerId: 'ai-system', // Special ID for AI system
-        sessionId: currentSessionId || undefined // Pass current session ID for redirect
-      });
-
-      const paymentData = (response as any).data || response;
-
-      // Redirect to Chapa payment page
-      if (paymentData.checkoutUrl) {
-        window.location.href = paymentData.checkoutUrl;
-      } else {
-        toast.error("Payment initialization failed");
+  // Share a recommendation via Web Share API, falling back to clipboard
+  const shareRecommendation = async (rec: AIRecommendation) => {
+    const text = `Check out this ${rec.style} ${rec.roomType} design: "${rec.name}" — ${rec.description}`;
+    const url = rec.imageUrl;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: rec.name, text, url });
+        toast.success("Shared successfully!");
+      } catch (_) {
+        // user cancelled — no-op
       }
-    } catch (error: any) {
-      console.error('Payment error:', error);
-      toast.error(error.error || error.message || "Failed to process payment");
-    } finally {
-      setIsProcessingPayment(false);
+    } else {
+      await navigator.clipboard.writeText(`${text}\n${url}`);
+      toast.success("Link copied to clipboard!");
     }
   };
 
-  // Load saved recommendations and check premium purchases
+  // Download the recommendation image
+  const downloadImage = async (rec: AIRecommendation) => {
+    try {
+      const response = await fetch(rec.imageUrl);
+      const blob = await response.blob();
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `${rec.name.replace(/\s+/g, "-")}.jpg`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      toast.success("Image downloaded!");
+    } catch {
+      toast.error("Download failed — try right-clicking the image.");
+    }
+  };
+
+  // Boards Handling
+  const openSaveModal = async (rec: AIRecommendation) => {
+    setItemToSave(rec);
+    setSaveModalOpen(true);
+    try {
+      const response = await apiClient.getBoards(1, 100);
+      const boardsData = (response as any).data || response;
+      setUserBoards(boardsData.boards || []);
+    } catch (error) {
+      console.error("Failed to load boards:", error);
+      toast.error("Failed to load your style boards.");
+    }
+  };
+
+  const saveToBoard = async (boardId: string) => {
+    if (!itemToSave) return;
+    try {
+      setIsSavingToBoard(boardId);
+      await apiClient.addAIItemToBoard(boardId, {
+        imageUrl: itemToSave.imageUrl,
+        name: itemToSave.name,
+        style: itemToSave.style,
+        roomType: itemToSave.roomType || roomType,
+        description: itemToSave.description
+      });
+      toast.success(`Saved to board!`);
+      setSaveModalOpen(false);
+      setItemToSave(null);
+    } catch (error: any) {
+      toast.error(error.error || error.message || "Failed to save to board");
+    } finally {
+      setIsSavingToBoard(null);
+    }
+  };
+
+
+
+  const checkPremiumPurchases = async () => { /* no-op — all results are free */ };
+
+  // Load saved recommendations
   const loadSavedRecommendations = async (specificSessionId?: string) => {
     try {
       const userId = localStorage.getItem('userId') || '507f1f77bcf86cd799439011';
@@ -290,11 +312,11 @@ export default function AIRecommenderPage() {
         setCurrentLimitType(limitType);
       }
 
-      // Mark some recommendations as premium (2 out of 4) - the backend already sets isPremium
-      const enhancedRecommendations = recommendationsArray.map((rec: any, index: number) => ({
+      // All recommendations are free to view — no paywall
+      const enhancedRecommendations = recommendationsArray.map((rec: any) => ({
         ...rec,
-        isPremium: rec.isPremium || index >= 2, // Use backend isPremium or fallback to index
-        templateType: rec.templateType || 'ai-generated' // Track if it's a curated template
+        isPremium: false,
+        templateType: rec.templateType || 'ai-generated'
       }));
 
       setRecommendations(enhancedRecommendations);
@@ -457,7 +479,7 @@ export default function AIRecommenderPage() {
           <div className="flex items-center justify-between mb-5">
             <div>
               <h2 className="font-semibold text-white">Your AI Design Sets</h2>
-              <p className="text-xs text-text-muted">4 cohesive furniture sets for your {roomType}</p>
+              <p className="text-xs text-text-muted">{recommendations.length} design{recommendations.length !== 1 ? 's' : ''} for your {roomType}</p>
             </div>
             <Button variant="ghost" size="sm" onClick={() => setStep("prefs")}>
               <RefreshCw className="w-3.5 h-3.5" /> Regenerate
@@ -466,27 +488,27 @@ export default function AIRecommenderPage() {
           <div className="grid sm:grid-cols-2 gap-5">
             {recommendations.map((set: AIRecommendation) => (
               <Card key={set.id}
-                className={cn("group overflow-hidden cursor-pointer", selected === set.id && "border-brand-500 shadow-glow")}
-                onClick={() => setSelected(set.id)}
+                className={cn("group overflow-hidden cursor-pointer transition-all duration-300", selected === set.id && "border-brand-500 shadow-glow")}
+                onClick={() => setSelected(set.id === selected ? null : set.id)}
               >
                 <div className="relative">
-                  <Image src={set.imageUrl} alt={set.name} width={600} height={400} className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-500" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
-                  <div className="absolute top-3 left-3 flex gap-2">
+                  <Image
+                    src={set.imageUrl}
+                    alt={set.name}
+                    width={600}
+                    height={400}
+                    className="w-full h-52 object-cover group-hover:scale-105 transition-transform duration-500"
+                    unoptimized
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                  <div className="absolute top-3 left-3 flex gap-2 flex-wrap">
                     <Badge variant="brand">{set.style}</Badge>
-                    {set.isPremium && (
-                      <Badge variant={unlockedDesigns.includes(set.id) ? "green" : "gold"}>
-                        {unlockedDesigns.includes(set.id) ? <CheckCircle className="w-3 h-3" /> : <Star className="w-3 h-3" />}
-                        {unlockedDesigns.includes(set.id) ? "UNLOCKED" : "Premium"}
-                      </Badge>
-                    )}
                     {set.templateType === 'curated' && (
                       <Badge variant="blue">
-                        <Sparkles className="w-3 h-3" />
-                        Curated Template
+                        <Sparkles className="w-3 h-3" /> Curated
                       </Badge>
                     )}
-                    {set.templateType === 'curated' && (currentLimitType === 'quota' || currentLimitType === 'rate_limit') && (
+                    {(currentLimitType === 'quota' || currentLimitType === 'rate_limit') && (
                       <Badge variant="orange">
                         <RefreshCw className="w-3 h-3" />
                         {currentLimitType === 'quota' ? 'Quota Limit' : 'Rate Limit'}
@@ -498,45 +520,45 @@ export default function AIRecommenderPage() {
                       <CheckCircle className="w-4 h-4 text-white" />
                     </div>
                   )}
-                  <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between">
-                    <div>
-                      <p className="font-bold text-white">{set.name}</p>
-                      <p className="text-xs text-white/70">Est. {set.budget}</p>
-                    </div>
+                  <div className="absolute bottom-3 left-3 right-3">
+                    <p className="font-bold text-white text-sm">{set.name}</p>
+                    <p className="text-xs text-white/70">Est. {set.budget}</p>
                   </div>
                 </div>
                 <div className="p-4">
-                  <div className="flex flex-wrap gap-1.5 mb-3">
+                  <p className="text-xs text-text-muted mb-3 leading-relaxed">{set.description}</p>
+                  <div className="flex flex-wrap gap-1.5 mb-4">
                     {set.products.map((p: string) => (
                       <span key={p} className="px-2 py-0.5 rounded text-[11px] bg-surface text-text-muted border border-surface-border">{p}</span>
                     ))}
                   </div>
                   <div className="flex gap-2">
-                    {set.isPremium && !unlockedDesigns.includes(set.id) ? (
-                      <>
-                        <Button
-                          variant="gold"
-                          size="sm"
-                          className="flex-1"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            unlockPremiumDesign(set.id);
-                          }}
-                          disabled={isProcessingPayment}
-                        >
-                          <Star className="w-3.5 h-3.5" />
-                          {isProcessingPayment ? 'Processing...' : 'Unlock $29.99'}
-                        </Button>
-                        <Button variant="ghost" size="sm"><Share2 className="w-3.5 h-3.5" /></Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button variant="ghost" size="sm" className="flex-1"><Heart className="w-3.5 h-3.5" /> Save</Button>
-                        <Button variant="ghost" size="sm" className="flex-1"><Eye className="w-3.5 h-3.5" /> Preview</Button>
-                        <Button variant="ghost" size="sm" className="flex-1"><Download className="w-3.5 h-3.5" /> Download</Button>
-                        <Button variant="ghost" size="sm"><Share2 className="w-3.5 h-3.5" /></Button>
-                      </>
-                    )}
+                    <Button
+                      variant="ghost" size="sm" className="flex-1"
+                      onClick={(e) => { e.stopPropagation(); setPreviewRec(set); }}
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Preview
+                    </Button>
+                    <Button
+                      variant="ghost" size="sm" className="flex-1"
+                      onClick={(e) => { e.stopPropagation(); openSaveModal(set); }}
+                    >
+                      <FolderHeart className="w-3.5 h-3.5" /> Save
+                    </Button>
+                    <Button
+                      variant="ghost" size="sm"
+                      onClick={(e) => { e.stopPropagation(); downloadImage(set); }}
+                      title="Download image"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="sm"
+                      onClick={(e) => { e.stopPropagation(); shareRecommendation(set); }}
+                      title="Share this design"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                    </Button>
                   </div>
                 </div>
               </Card>
@@ -550,9 +572,134 @@ export default function AIRecommenderPage() {
                   Hire a Designer <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>
-              <Button variant="outline" size="lg"><Download className="w-4 h-4" /> Export PDF</Button>
+              <Button
+                variant="outline" size="lg"
+                onClick={() => {
+                  const rec = recommendations.find(r => r.id === selected);
+                  if (rec) shareRecommendation(rec);
+                }}
+              >
+                <Share2 className="w-4 h-4" /> Share Design
+              </Button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Full-screen Preview Modal ── */}
+      {previewRec && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setPreviewRec(null)}
+        >
+          <div
+            className="relative max-w-3xl w-full bg-surface-card rounded-2xl overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setPreviewRec(null)}
+              className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-black/60 backdrop-blur flex items-center justify-center hover:bg-black/80 transition-colors"
+            >
+              <X className="w-4 h-4 text-white" />
+            </button>
+            <div className="relative">
+              <img src={previewRec.imageUrl} alt={previewRec.name} className="w-full max-h-[60vh] object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+              <div className="absolute bottom-4 left-4">
+                <Badge variant="brand" className="mb-2">{previewRec.style}</Badge>
+                <h3 className="font-bold text-white text-xl">{previewRec.name}</h3>
+                <p className="text-white/70 text-sm">Est. {previewRec.budget}</p>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-text-muted text-sm leading-relaxed mb-4">{previewRec.description}</p>
+              <div className="flex flex-wrap gap-1.5 mb-5">
+                {previewRec.products.map((p) => (
+                  <span key={p} className="px-2 py-1 rounded text-xs bg-surface text-text-muted border border-surface-border">{p}</span>
+                ))}
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  className="flex-1"
+                  onClick={() => openSaveModal(previewRec)}
+                >
+                  <FolderHeart className="w-4 h-4" /> Save to Board
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => downloadImage(previewRec)}
+                >
+                  <Download className="w-4 h-4" /> Download
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => shareRecommendation(previewRec)}
+                >
+                  <Share2 className="w-4 h-4" /> Share
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Save to Board Modal ── */}
+      {saveModalOpen && itemToSave && (
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setSaveModalOpen(false)}
+        >
+          <div
+            className="glass rounded-2xl border border-surface-border p-6 max-w-sm w-full shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-semibold text-white flex items-center gap-2">
+                <FolderHeart className="w-5 h-5 text-brand-400" /> Save to Board
+              </h3>
+              <button
+                onClick={() => setSaveModalOpen(false)}
+                className="text-text-muted hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-[50vh] overflow-y-auto mb-4 pr-1">
+              {userBoards.length === 0 ? (
+                <div className="text-center py-6 text-text-muted">
+                  <p className="text-sm">You don't have any boards yet.</p>
+                </div>
+              ) : (
+                userBoards.map(board => (
+                  <button
+                    key={board._id}
+                    onClick={() => saveToBoard(board._id)}
+                    disabled={isSavingToBoard === board._id}
+                    className="w-full flex items-center justify-between p-3 rounded-xl border border-surface-border bg-surface-card hover:border-brand-500 hover:bg-surface-hover transition-all text-left disabled:opacity-50"
+                  >
+                    <div>
+                      <p className="font-medium text-white text-sm">{board.name}</p>
+                      <p className="text-xs text-text-muted">{board.saveCount} items</p>
+                    </div>
+                    {isSavingToBoard === board._id ? (
+                      <RefreshCw className="w-4 h-4 animate-spin text-brand-400" />
+                    ) : (
+                      <CheckCircle className="w-4 h-4 text-surface-border opacity-0 group-hover:opacity-100" />
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+
+            <Link href="/dashboard/boards" className="w-full block">
+              <Button variant="outline" className="w-full">
+                <Plus className="w-4 h-4" /> Create New Board
+              </Button>
+            </Link>
+          </div>
         </div>
       )}
     </div>

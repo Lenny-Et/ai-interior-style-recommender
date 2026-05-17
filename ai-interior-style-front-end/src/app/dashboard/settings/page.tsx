@@ -7,10 +7,11 @@ import Badge from "@/components/ui/Badge";
 import { User, Mail, Lock, Bell, Palette, Globe, Trash2, Eye, EyeOff, CheckCircle, Sun, Moon } from "lucide-react";
 import Avatar from "@/components/ui/Avatar";
 import { useAppStore } from "@/lib/store";
+import { apiClient } from "@/lib/api-client";
 import toast from "react-hot-toast";
 import { STYLE_TAGS, ROOM_TYPES, cn } from "@/lib/utils";
 
-const TABS = ["Profile", "Preferences", "Notifications", "Security", "Danger Zone"] as const;
+const TABS = ["Profile", "Preferences", "Notifications", "Security", "Pro Account", "Danger Zone"] as const;
 type Tab = typeof TABS[number];
 
 export default function SettingsPage() {
@@ -18,6 +19,7 @@ export default function SettingsPage() {
   const [tab, setTab]         = useState<Tab>("Profile");
   const [showPw, setShowPw]   = useState(false);
   const [saving, setSaving]   = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: user?.profile?.firstName || '',
     lastName: user?.profile?.lastName || '',
@@ -46,6 +48,22 @@ export default function SettingsPage() {
       toast.error(error.error || error.message || "Failed to save settings");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleProUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      const response = await apiClient.initiateProUpgradePayment();
+      if (response.checkoutUrl) {
+        window.location.href = response.checkoutUrl; // Redirect to Chapa
+      } else {
+        toast.error("Failed to get payment link.");
+      }
+    } catch (error: any) {
+      toast.error(error.error || error.message || "Failed to initiate upgrade.");
+    } finally {
+      setUpgrading(false);
     }
   };
 
@@ -283,6 +301,27 @@ export default function SettingsPage() {
               <p className="text-xs text-text-muted mb-3">Download all your data including designs, boards, and transactions as a ZIP file.</p>
               <Button variant="ghost">Request Data Export</Button>
             </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {/* ── Pro Account ── */}
+      {tab === "Pro Account" && (
+        <Card>
+          <CardBody className="space-y-5">
+            <h2 className="font-semibold text-white flex items-center gap-2"><CheckCircle className="w-4 h-4 text-brand-400" />Pro Account Status</h2>
+            {user?.isPro ? (
+              <div className="p-4 rounded-xl border border-green-500/20 bg-green-500/5 text-green-400">
+                <p className="text-sm font-semibold mb-1">You have a Pro Account!</p>
+                <p className="text-xs">Enjoy all premium features, forever.</p>
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl border border-brand-500/20 bg-brand-500/5">
+                <p className="text-sm font-semibold text-white mb-1">Upgrade to Pro Account</p>
+                <p className="text-xs text-text-muted mb-3">Unlock all premium features for a one-time payment of $12. Forever access!</p>
+                <Button onClick={handleProUpgrade} loading={upgrading}><CheckCircle className="w-4 h-4" /> Upgrade to Pro ($12)</Button>
+              </div>
+            )}
           </CardBody>
         </Card>
       )}

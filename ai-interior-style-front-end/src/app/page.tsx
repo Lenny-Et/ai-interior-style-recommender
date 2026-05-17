@@ -152,6 +152,7 @@ export default function LandingPage() {
                   src={BEFORE_AFTER[activeBA].before}
                   alt="Before"
                   width={600} height={400}
+                  loading="eager"
                   className="w-full h-64 object-cover"
                 />
                 <div className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-black/50 backdrop-blur-sm text-xs font-semibold border border-white/10">

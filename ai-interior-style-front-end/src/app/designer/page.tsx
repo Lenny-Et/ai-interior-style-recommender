@@ -164,14 +164,14 @@ export default function DesignerDashboard() {
             src={user?.profile?.avatarUrl || ""} 
             name={`${user?.profile?.firstName || 'Designer'} ${user?.profile?.lastName || ''}`.trim()} 
             size="xl" 
-            verified={user?.is_verified} 
+            verified={user?.approvalStatus === 'approved'} 
           />
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-display text-2xl font-bold text-white">
                 {`${user?.profile?.firstName || 'Designer'} ${user?.profile?.lastName || ''}`.trim()}
               </h1>
-              {user?.is_verified && <Badge variant="brand"><CheckCircle className="w-3 h-3" /> Verified Pro</Badge>}
+              {user?.approvalStatus === 'approved' && <Badge variant="brand"><CheckCircle className="w-3 h-3" /> Verified Pro</Badge>}
             </div>
             <p className="text-text-muted text-sm">
               {user?.profile?.company || 'Independent Designer'}
