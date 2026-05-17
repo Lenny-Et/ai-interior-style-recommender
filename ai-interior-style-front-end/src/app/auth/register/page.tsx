@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import { Mail, Lock, User, Eye, EyeOff, ArrowRight, Home, Briefcase, CheckCircle } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, ArrowRight, Home, Briefcase, CheckCircle, PlusCircle, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
@@ -21,7 +21,15 @@ export default function RegisterPage() {
   const [showPw, setShowPw]   = useState(false);
   const [loading, setLoading] = useState(false);
   const [step, setStep]       = useState(1);
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ 
+    name: "", 
+    email: "", 
+    password: "",
+    company: "",
+    portfolioUrl: "",
+    cvUrl: "",
+    workHistory: [{ title: "", description: "", startDate: "", endDate: "" }]
+  });
   const router = useRouter();
   const { register, isLoading, error } = useAppStore();
 
@@ -39,6 +47,10 @@ export default function RegisterPage() {
         profile: {
           firstName,
           lastName: lastName || '',
+          company: role === 'designer' ? form.company : undefined,
+          portfolioUrl: role === 'designer' ? form.portfolioUrl : undefined,
+          cvUrl: role === 'designer' ? form.cvUrl : undefined,
+          workHistory: role === 'designer' ? form.workHistory : undefined,
         }
       });
       
@@ -107,6 +119,38 @@ export default function RegisterPage() {
               <h2 className="font-semibold text-white mb-4">Your details</h2>
               <Input id="reg-name"  label="Full Name"  type="text"     placeholder="Alex Johnson"       icon={User} value={form.name}     onChange={(e) => setForm({ ...form, name: e.target.value })}     required />
               <Input id="reg-email" label="Email"      type="email"    placeholder="you@example.com"    icon={Mail} value={form.email}    onChange={(e) => setForm({ ...form, email: e.target.value })}    required />
+              {role === 'designer' && (
+                <>
+                  <Input id="reg-company" label="Company (Optional)" type="text" placeholder="Design Studio Inc." icon={Briefcase} value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />
+                  <Input id="reg-portfolio" label="Portfolio URL (Optional)" type="url" placeholder="https://myportfolio.com" icon={Briefcase} value={form.portfolioUrl} onChange={(e) => setForm({ ...form, portfolioUrl: e.target.value })} />
+                  <Input id="reg-cv" label="CV URL (Optional)" type="url" placeholder="https://mycv.com/my-cv.pdf" icon={Briefcase} value={form.cvUrl} onChange={(e) => setForm({ ...form, cvUrl: e.target.value })} />
+                  <h3 className="font-semibold text-white mt-6 mb-2">Work History (Past Experience)</h3>
+                  {form.workHistory.map((item, index) => (
+                    <div key={index} className="space-y-2 border p-4 rounded-lg border-surface-border">
+                      <Input label="Job Title" type="text" placeholder="Lead Designer" value={item.title} onChange={(e) => {
+                        const newWorkHistory = [...form.workHistory];
+                        newWorkHistory[index].title = e.target.value;
+                        setForm({ ...form, workHistory: newWorkHistory });
+                      }} />
+                      <Input label="Description" type="text" placeholder="Designed residential interiors" value={item.description} onChange={(e) => {
+                        const newWorkHistory = [...form.workHistory];
+                        newWorkHistory[index].description = e.target.value;
+                        setForm({ ...form, workHistory: newWorkHistory });
+                      }} />
+                      <Input label="Start Date" type="date" value={item.startDate} onChange={(e) => {
+                        const newWorkHistory = [...form.workHistory];
+                        newWorkHistory[index].startDate = e.target.value;
+                        setForm({ ...form, workHistory: newWorkHistory });
+                      }} />
+                      <Input label="End Date" type="date" value={item.endDate} onChange={(e) => {
+                        const newWorkHistory = [...form.workHistory];
+                        newWorkHistory[index].endDate = e.target.value;
+                        setForm({ ...form, workHistory: newWorkHistory });
+                      }} />
+                    </div>
+                  ))}
+                </>
+              )}
               <Input
                 id="reg-password"
                 label="Password"

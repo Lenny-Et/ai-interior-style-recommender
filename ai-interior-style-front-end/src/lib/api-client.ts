@@ -1,5 +1,5 @@
 // API Client Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api';
 
 export interface ApiResponse<T = any> {
   data?: T;
@@ -405,6 +405,19 @@ class ApiClient {
     });
   }
 
+  async addAIItemToBoard(boardId: string, itemData: {
+    imageUrl: string;
+    name: string;
+    style: string;
+    roomType: string;
+    description: string;
+  }) {
+    return this.request<{ message: string, board: any }>(`/boards/${boardId}/ai-items`, {
+      method: 'POST',
+      body: JSON.stringify(itemData),
+    });
+  }
+
   async removeItemFromBoard(boardId: string, itemId: string) {
     return this.request<{ message: string }>(`/boards/${boardId}/items/${itemId}`, {
       method: 'DELETE',
@@ -536,6 +549,12 @@ class ApiClient {
     });
   }
 
+  async initiateProUpgradePayment() {
+    return this.request<{ checkoutUrl: string; tx_ref: string }>('/payment/initiate-pro-upgrade', {
+      method: 'POST',
+    });
+  }
+
   // Premium access control
   async checkPremiumAccess(purchaseType: string, itemId: string) {
     return this.request<{ hasAccess: boolean; expiresAt?: string; purchaseId?: string }>(`/payment/check-access/${purchaseType}/${itemId}`);
@@ -579,6 +598,20 @@ class ApiClient {
     return this.request(`/admin/analytics/users/${userId}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
+    });
+  }
+
+  async approveDesigner(userId: string, approvalStatus: 'approved' | 'rejected') {
+    return this.request(`/admin/users/${userId}/approve-designer`, {
+      method: 'PUT',
+      body: JSON.stringify({ approvalStatus }),
+    });
+  }
+
+  async toggleUserVerification(userId: string, isVerified: boolean) {
+    return this.request(`/admin/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_verified: isVerified }),
     });
   }
 

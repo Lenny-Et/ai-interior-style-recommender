@@ -20,8 +20,22 @@ export default function LoginPage() {
     
     try {
       await login(form.email, form.password);
-      toast.success("Welcome back!");
-      router.push("/dashboard");
+      const user = useAppStore.getState().user; // Get the updated user state
+
+      if (user) {
+        if (user.role === 'admin') {
+          toast.success("Welcome, Admin!");
+          router.push("/admin");
+        } else if (user.role === 'designer' && user.approvalStatus === 'pending') {
+          toast.success("Login successful! Your designer account is pending approval.");
+          router.push("/designer/pending-approval");
+        } else {
+          toast.success("Welcome back!");
+          router.push("/dashboard");
+        }
+      } else {
+        toast.error("Login failed: User data not found after successful authentication.");
+      }
     } catch (error: any) {
       toast.error(error.error || error.message || "Login failed. Please try again.");
     }
