@@ -12,7 +12,8 @@ interface User {
   email: string;
   role: Role;
   avatarUrl?: string;
-  verified?: boolean;
+  approvalStatus?: 'pending' | 'approved' | 'rejected';
+  isPro?: boolean;
   profile?: any;
 }
 
@@ -119,7 +120,7 @@ export const useAppStore = create<AppState>()(
         try {
           const response = await apiClient.login(email, password);
           const authData = (response as any).data || response;
-          const { token, role, is_verified } = authData;
+          const { token, role, approvalStatus, isPro } = authData;
           
           // Store token
           if (token) localStorage.setItem('auth_token', token);
@@ -140,7 +141,8 @@ export const useAppStore = create<AppState>()(
             email: userProfile?.email || email,
             role: (userProfile?.role as Role) || (role as Role) || 'homeowner',
             avatarUrl: userProfile?.profile?.profilePicture || undefined,
-            verified: userProfile?.is_verified || is_verified || false,
+            approvalStatus: userProfile?.approvalStatus || approvalStatus || 'pending',
+            isPro: userProfile?.isPro || isPro || false,
             profile: userProfile?.profile || {}
           };
 
@@ -297,7 +299,7 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         theme: state.theme,
         sidebarOpen: state.sidebarOpen,
-        user: state.user,
+        user: state.user ? { ...state.user, approvalStatus: state.user.approvalStatus || 'pending', isPro: state.user.isPro || false } : null,
         token: state.token,
         isAuthenticated: state.isAuthenticated
       }),

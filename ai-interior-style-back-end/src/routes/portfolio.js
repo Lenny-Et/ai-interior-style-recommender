@@ -1,6 +1,7 @@
 import express from 'express';
 import { parser, getFileUrl } from '../services/cloudinary.js';
 import { PortfolioItem } from '../models/PortfolioItem.js';
+import { authenticateToken, requireApprovedDesigner } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -81,7 +82,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST - Upload portfolio item (existing)
-router.post('/upload', parser.single('image'), async (req, res) => {
+router.post('/upload', authenticateToken, requireApprovedDesigner, parser.single('image'), async (req, res) => {
   try {
     console.log('Portfolio upload request received:', {
       hasFile: !!req.file,
@@ -172,7 +173,7 @@ router.post('/upload', parser.single('image'), async (req, res) => {
 });
 
 // PUT - Update portfolio item
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticateToken, requireApprovedDesigner, async (req, res) => {
   try {
     const { description, metadata } = req.body;
     
@@ -207,7 +208,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // PATCH - Toggle featured status
-router.patch('/:id/featured', async (req, res) => {
+router.patch('/:id/featured', authenticateToken, requireApprovedDesigner, async (req, res) => {
   try {
     const { featured } = req.body;
     
@@ -237,7 +238,7 @@ router.patch('/:id/featured', async (req, res) => {
 });
 
 // DELETE - Remove portfolio item
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticateToken, requireApprovedDesigner, async (req, res) => {
   try {
     const item = await PortfolioItem.findById(req.params.id);
     

@@ -303,7 +303,9 @@ router.get('/designers', async (req, res) => {
       }
     );
 
+    console.log('Designers search pipeline:', JSON.stringify(pipeline, null, 2));
     const designers = await User.aggregate(pipeline);
+    console.log('Designers search results:', JSON.stringify(designers, null, 2));
 
     // Get total count
     const total = await User.countDocuments(query);

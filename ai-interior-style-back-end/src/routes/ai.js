@@ -1,3 +1,7 @@
+import * as fsp from 'fs/promises';
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import axios from 'axios';
 import path from 'path';
@@ -26,18 +30,16 @@ const upload = multer({
   }
 });
 
-// AI Service Configuration
-const geminiApiKey = process.env.GEMINI_API_KEY;
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
-const GEMINI_API_BASE_URL = process.env.GEMINI_API_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/models';
-const GEMINI_MODEL = 'gemini-2.5-flash';
-const GEMINI_ENDPOINT = `${GEMINI_API_BASE_URL}/${GEMINI_MODEL}:generateContent`;
+
 
 // Defer env check so dotenv/.env.local has time to inject variables
 setTimeout(() => {
   console.log('Environment check:', {
     GEMINI_API_KEY: process.env.GEMINI_API_KEY ? 'SET' : 'NOT SET',
     CHAPA_SECRET_KEY: process.env.CHAPA_SECRET_KEY ? 'SET' : 'NOT SET',
+    HF_INFERENCE_API_BASE_URL: process.env.HF_INFERENCE_API_BASE_URL ? 'SET' : 'NOT SET',
+    HF_ACCESS_TOKEN: process.env.HF_ACCESS_TOKEN ? 'SET' : 'NOT SET',
+    USE_GEMINI: process.env.USE_GEMINI ? 'SET' : 'NOT SET',
   });
 }, 0);
 
@@ -98,8 +100,14 @@ router.post('/recommend', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Image URL is required' });
     }
 
+    // Retrieve environment variables here, where process.env is guaranteed to be populated
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    const useGeminiFlag = process.env.USE_GEMINI === 'true';
+    const hfInferenceApiBaseUrl = process.env.HF_INFERENCE_API_BASE_URL;
+    const hfAccessToken = process.env.HF_ACCESS_TOKEN;
+
     // Use Gemini API to analyze image and generate recommendations
-    const features = await analyzeImageWithGemini(imageUrl, styles, roomType, budget);
+    const features = await analyzeImageWithGemini(imageUrl, styles, roomType, budget, geminiApiKey, useGeminiFlag);
 
     // Search for similar designs in our database
     const similarDesigns = await searchSimilarDesigns(features, styles, roomType);
@@ -111,7 +119,12 @@ router.post('/recommend', authenticateToken, async (req, res) => {
       roomType,
       budget,
       creativity,
-      similarDesigns
+      similarDesigns,
+      imageUrl, // Pass the original image URL
+      geminiApiKey,
+      useGeminiFlag,
+      hfInferenceApiBaseUrl,
+      hfAccessToken
     );
 
     // Save recommendations to user profile
@@ -361,10 +374,25 @@ router.post('/analyze-style', authenticateToken, async (req, res) => {
 
 // ===== HELPER FUNCTIONS =====
 
-// Convert image URL to base64 for Gemini vision analysis
+const GEMINI_MODEL = 'gemini-2.0-flash';
+const HF_MODEL_ID = 'runwayml/stable-diffusion-v1-5'; // Or another appropriate model
+
+// Helper to get image as base64
 async function getImageBase64(imageUrl) {
   try {
-    // Check if it's a blob URL (which backend can't access)
+    // If the image is already a data URL, return it directly
+    if (imageUrl.startsWith('data:')) {
+      return imageUrl;
+    }
+
+    // If it's a local file, read it
+    if (imageUrl.startsWith('http://localhost:5000/uploads/')) {
+      const filePath = path.join(process.cwd(), imageUrl.replace('http://localhost:5000', ''));
+      const fileBuffer = await fsp.readFile(filePath);
+      return `data:image/jpeg;base64,${fileBuffer.toString('base64')}`;
+    }
+
+    // Handle blob URLs (client-side only, should not reach here for server-side processing)
     if (imageUrl.startsWith('blob:')) {
       console.warn('Blob URL detected - falling back to text-based analysis');
       throw new Error('BLOB_URL_NOT_SUPPORTED');
@@ -372,13 +400,74 @@ async function getImageBase64(imageUrl) {
 
     const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
     const base64 = Buffer.from(response.data, 'binary').toString('base64');
-    return base64;
+    // Return as a data URL
+    return `data:${response.headers['content-type'] || 'image/jpeg'};base64,${base64}`;
   } catch (error) {
     if (error.message === 'BLOB_URL_NOT_SUPPORTED') {
       throw error; // Re-throw for special handling
     }
     console.error('Error converting image to base64:', error);
     throw new Error('Failed to process image for analysis');
+  }
+}
+
+// Generate image using Hugging Face Inference API
+async function generateImageWithHuggingFace(prompt, imageData, hfInferenceApiBaseUrl, hfAccessToken) {
+  // Ensure base URL has a trailing slash and model ID does not have a leading slash
+  const baseUrl = hfInferenceApiBaseUrl.endsWith('/') ? hfInferenceApiBaseUrl : `${hfInferenceApiBaseUrl}/`;
+  const modelId = HF_MODEL_ID.startsWith('/') ? HF_MODEL_ID.substring(1) : HF_MODEL_ID;
+  const hfApiUrl = `${baseUrl}${modelId}`;
+
+  console.log(`DEBUG HF: hfInferenceApiBaseUrl=${hfInferenceApiBaseUrl}, HF_MODEL_ID=${HF_MODEL_ID}, constructed hfApiUrl=${hfApiUrl}`);
+  
+  if (typeof hfInferenceApiBaseUrl !== 'string' || hfInferenceApiBaseUrl.length === 0 ||
+      typeof HF_MODEL_ID !== 'string' || HF_MODEL_ID.length === 0 ||
+      typeof hfAccessToken !== 'string' || hfAccessToken.length === 0) {
+    console.warn('Hugging Face API configuration missing or invalid. Skipping image generation.');
+    return null;
+  }
+
+  // Validate imageData before processing
+  if (!imageData || typeof imageData !== 'string' || !imageData.includes(',')) {
+    console.warn('Invalid image data provided. Skipping image generation.');
+    return null;
+  }
+
+  try {
+    // Convert base64 image data to a Buffer
+    const imageBuffer = Buffer.from(imageData.split(',')[1], 'base64');
+
+
+
+    const response = await axios.post(
+      hfApiUrl,
+      {
+        inputs: imageData, // Send base64 image data as string
+        parameters: {
+          prompt: prompt,
+          // Add other parameters as needed, e.g., negative_prompt, guidance_scale
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${hfAccessToken}`,
+          'Content-Type': 'application/json', // Set Content-Type to application/json
+          'X-Wait-For-Model': 'true', // Wait for model to load if not active
+          'X-Use-Cache': 'false', // Bypass cache for fresh generation
+        },
+        responseType: 'arraybuffer', // Expecting binary data (image)
+      }
+    );
+    console.log('Hugging Face generateImageWithHuggingFace response status:', response.status);
+    console.log('Hugging Face generateImageWithHuggingFace response headers:', response.headers);
+
+    // Convert the image buffer to a base64 string
+    const generatedImageBase64 = Buffer.from(response.data, 'binary').toString('base64');
+    return `data:image/jpeg;base64,${generatedImageBase64}`;
+
+  } catch (error) {
+    console.error('Error generating image with Hugging Face:', error.response?.data ? error.response.data.toString() : error.message);
+    throw new Error('Failed to generate image with Hugging Face');
   }
 }
 
@@ -409,12 +498,15 @@ async function searchSimilarDesigns(features, styles, roomType) {
   }
 }
 
-async function analyzeImageWithGemini(imageUrl, styles, roomType, budget) {
+async function analyzeImageWithGemini(imageUrl, styles, roomType, budget, geminiApiKey, useGeminiFlag) {
   try {
-    const key = process.env.GEMINI_API_KEY;
-    const useGemini = process.env.USE_GEMINI === 'true' && !!key;
+    const key = geminiApiKey;
+    const useGemini = useGeminiFlag && typeof key === 'string' && key.length > 0;
+    const GEMINI_API_BASE_URL = process.env.GEMINI_API_BASE_URL || 'https://generativelanguage.googleapis.com';
+    const GEMINI_ENDPOINT = `${GEMINI_API_BASE_URL}/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
     if (!useGemini) {
-      console.warn('Gemini disabled or key missing — returning mock features (set USE_GEMINI=true to enable)');
+      console.warn('Gemini disabled or key missing — returning mock features (set USE_GEMINI=true and GEMINI_API_KEY to enable)');
       return {
         colorPalette: ['#2C3E50', '#FDFEFE', '#D5DBDB'],
         style: styles[0] || 'Modern',
@@ -466,8 +558,15 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget) {
 
     // Try to get image data, fall back to text-only if blob URL
     let imageData = null;
+    let imageMimeType = 'image/jpeg'; // Default to JPEG
+
     try {
       imageData = await getImageBase64(imageUrl);
+      // Extract mime type from data URL if available
+      const mimeMatch = imageData.match(/^data:(.*?);base64,/);
+      if (mimeMatch && mimeMatch[1]) {
+        imageMimeType = mimeMatch[1];
+      }
     } catch (error) {
       if (error.message === 'BLOB_URL_NOT_SUPPORTED') {
         console.log('Using text-only analysis due to blob URL');
@@ -485,8 +584,8 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget) {
               { text: prompt },
               {
                 inline_data: {
-                  mime_type: "image/jpeg",
-                  data: imageData
+                  mime_type: imageMimeType,
+                  data: imageData.split(',')[1]
                 }
               }
             ]
@@ -498,15 +597,54 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget) {
             }]
           }]
         };
+        console.log('Gemini analyzeImageWithGemini requestPayload:', JSON.stringify({
+          ...requestPayload,
+          contents: requestPayload.contents.map(content => ({
+            ...content,
+            parts: content.parts.map(part => {
+              if (part.inline_data) {
+                return { ...part, inline_data: { ...part.inline_data, data: part.inline_data.data.substring(0, 100) + '...' } };
+              }
+              return part;
+            })
+          }))
+        }, null, 2));
+
+
 
         response = await axios.post(`${GEMINI_ENDPOINT}?key=${key}`, requestPayload);
         break; // Success, exit retry loop
       } catch (error) {
         const status = error.response?.status;
-        if (status === 429 || status >= 500) {
+        // 429 = rate limit: retrying seconds later never helps with per-minute quotas.
+        // Fail fast and use the fallback so the user gets a response quickly.
+        if (status === 429) {
+          console.warn('Gemini rate limit hit during image analysis — falling back immediately (no retry)');
+          return {
+            actualRoomType: roomType,
+            requestedRoomType: roomType,
+            roomMatch: true,
+            detectedStyle: styles[0] || 'Modern',
+            preferredStyles: styles,
+            styleMatch: true,
+            colorPalette: ['#2C3E50', '#FDFEFE', '#D5DBDB'],
+            visibleFurniture: [],
+            materials: [],
+            architecturalFeatures: [],
+            lighting: [],
+            currentMood: 'contemporary',
+            keyObservations: ['Rate limit — using curated fallback'],
+            recommendationNotes: 'Rate limit reached — using curated design templates',
+            style: styles[0] || 'Modern',
+            keyFeatures: ['minimalist', 'clean lines'],
+            mood: 'contemporary',
+            _rateLimited: true
+          };
+        } else if (status >= 500) {
+          // Transient server error: worth a retry with backoff
           retryCount++;
           if (retryCount >= maxRetries) {
-            console.error(`Gemini API error (Status: ${status}) exceeded max retries during image analysis, using fallback`);
+            console.error(`Gemini server error (Status: ${status}) exceeded max retries during image analysis, using fallback`);
             return {
               actualRoomType: roomType,
               requestedRoomType: roomType,
@@ -520,17 +658,17 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget) {
               architecturalFeatures: [],
               lighting: [],
               currentMood: 'contemporary',
-              keyObservations: [`API Error ${status} - using fallback`],
-              recommendationNotes: `Using fallback analysis due to API error ${status}`,
-              // Legacy compatibility
+              keyObservations: [`Server error ${status} — using fallback`],
+              recommendationNotes: `Server error — using curated design templates`,
               style: styles[0] || 'Modern',
               keyFeatures: ['minimalist', 'clean lines'],
-              mood: 'contemporary'
+              mood: 'contemporary',
+              _rateLimited: false
             };
           }
-          // Exponential backoff: 1s, 2s, 4s
-          const delay = Math.pow(2, retryCount - 1) * 1000;
-          console.log(`Gemini API error (Status: ${status}) during image analysis, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+          const fixedDelays = [3000, 8000, 15000]; // 3s, 8s, 15s for 5xx
+          const delay = fixedDelays[retryCount - 1] || 15000;
+          console.log(`Gemini server error (Status: ${status}) during image analysis, retry ${retryCount}/${maxRetries} after ${delay}ms`);
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
           throw error;
@@ -615,16 +753,34 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget) {
   }
 }
 
-async function generateDesignRecommendationsWithGemini(features, styles, roomType, budget, creativity, similarDesigns) {
+async function generateDesignRecommendationsWithGemini(features, styles, roomType, budget, creativity, similarDesigns, originalImageUrl, geminiApiKey, useGeminiFlag, hfInferenceApiBaseUrl, hfAccessToken) {
   try {
-    const key = process.env.GEMINI_API_KEY;
-    const useGemini = process.env.USE_GEMINI === 'true' && !!key;
+    const key = geminiApiKey;
+    const useGemini = useGeminiFlag && typeof key === 'string' && key.length > 0;
+    const GEMINI_API_BASE_URL = process.env.GEMINI_API_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/models';
+    const GEMINI_ENDPOINT = `${GEMINI_API_BASE_URL}/${GEMINI_MODEL}:generateContent`;
     if (!useGemini) {
       console.warn('Gemini disabled or key missing — returning mock recommendations (set USE_GEMINI=true to enable)');
       return generateMockRecommendations(styles, roomType, budget);
     }
+    // If image analysis was already rate-limited, don't burn another API call —
+    // skip straight to curated templates to avoid 45s+ of pointless retries.
+    if (features._rateLimited) {
+      console.warn('Image analysis was rate-limited — skipping Gemini recommendation call, using curated templates');
+      return generateCuratedDesignTemplates(styles, roomType, budget);
+    }
+
+    // Get base64 of the original image for Image-to-Image generation
+    let originalImageBase64 = null;
+    try {
+      originalImageBase64 = await getImageBase64(originalImageUrl);
+    } catch (error) {
+      console.warn('Could not get base64 for original image, proceeding with text-to-image if possible:', error.message);
+      // If image cannot be processed, we might fall back to text-to-image or a different strategy
+    }
+
     const prompt = `
-    You are an expert interior designer. Generate 4 interior design recommendations based on:
+    You are an expert interior designer. Generate 1 interior design recommendation based on:
     - Analysis: ${JSON.stringify(features)}
     - Preferred styles: ${styles.join(', ')}
     - Room type: ${roomType}
@@ -633,7 +789,7 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
     
     CRITICAL: Generate ONLY interior design recommendations for ${roomType}. Do not generate any other content like cars, waterfalls, landscapes, etc.
     
-    Create recommendations in this exact JSON format:
+    Create recommendation in this exact JSON format:
     [
       {
         "id": "unique-id",
@@ -662,28 +818,35 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
 
     while (retryCount < maxRetries) {
       try {
+        const requestBody = {
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
+          }]
+        };
+        console.log('Gemini generateDesignRecommendationsWithGemini requestBody:', JSON.stringify(requestBody, null, 2));
         response = await axios.post(
           `${GEMINI_ENDPOINT}?key=${key}`,
-          {
-            contents: [{
-              parts: [{
-                text: prompt
-              }]
-            }]
-          }
+          requestBody,
         );
         break; // Success, exit retry loop
       } catch (error) {
         const status = error.response?.status;
-        if (status === 429 || status >= 500) {
+        // 429 = rate limit: fail fast, no retry
+        if (status === 429) {
+          console.warn('Gemini rate limit hit during recommendations — falling back immediately (no retry)');
+          return generateMockRecommendations(styles, roomType, budget);
+        } else if (status >= 500) {
+          // Transient server error: retry with backoff
           retryCount++;
           if (retryCount >= maxRetries) {
-            console.error(`Gemini API error (Status: ${status}) exceeded max retries during recommendations, using fallback`);
+            console.error(`Gemini server error (Status: ${status}) exceeded max retries during recommendations, using fallback`);
             return generateMockRecommendations(styles, roomType, budget);
           }
-          // Exponential backoff: 1s, 2s, 4s
-          const delay = Math.pow(2, retryCount - 1) * 1000;
-          console.log(`Gemini API error (Status: ${status}) during recommendations, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+          const fixedDelays = [3000, 8000, 15000]; // 3s, 8s, 15s
+          const delay = fixedDelays[retryCount - 1] || 15000;
+          console.log(`Gemini server error (Status: ${status}) during recommendations, retry ${retryCount}/${maxRetries} after ${delay}ms`);
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
           throw error; // Re-throw non-rate-limit/non-server errors
@@ -703,13 +866,29 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
       return generateMockRecommendations(styles, roomType, budget);
     }
 
-    // Ensure we have 4 recommendations
-    if (recommendations.length < 4) {
+    // Ensure we have at least 1 recommendation
+    if (recommendations.length < 1) {
       return generateMockRecommendations(styles, roomType, budget);
     }
 
-    // Assign images based on style/room type (Gemini leaves imageUrl empty)
-    return assignRecommendationImages(recommendations, roomType);
+    // Generate images for each recommendation using Hugging Face
+    const recommendationsWithImages = await Promise.all(recommendations.map(async (rec) => {
+      const imagePrompt = `Interior design of a ${rec.roomType || roomType} in ${rec.style || styles[0]} style. ${rec.description}.`;
+      let generatedImageUrl = null;
+      if (originalImageBase64) {
+        try {
+          generatedImageUrl = await generateImageWithHuggingFace(imagePrompt, originalImageBase64, hfInferenceApiBaseUrl, hfAccessToken);
+        } catch (hfError) {
+          console.error('Hugging Face image generation failed, falling back to mock image:', hfError);
+        }
+      }
+      return {
+        ...rec,
+        imageUrl: (generatedImageUrl || 'https://via.placeholder.com/800x600?text=Image+Generation+Failed').replace(/`/g, '').trim() // Fallback image, remove backticks and trim whitespace
+      };
+    }));
+
+    return recommendationsWithImages;
   } catch (error) {
     console.error('Gemini recommendations error:', error);
     // Return mock recommendations if Gemini fails
@@ -717,29 +896,11 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
   }
 }
 
-// Assign contextual images to recommendations that have no image
-function assignRecommendationImages(recommendations, roomType) {
-  return recommendations.map((rec, index) => ({
-    ...rec,
-    imageUrl: rec.imageUrl && rec.imageUrl.startsWith('http')
-      ? rec.imageUrl
-      : getInteriorImageUrl(rec.style || '', roomType, index, rec.name || 'interior design')
-  }));
-}
 
-function getInteriorImageUrl(style, roomType, index = 0, name = '') {
-  const prompt = `Highly detailed, photorealistic interior design of a ${roomType}. Style: ${style}. Concept: ${name}. Beautiful lighting, architectural photography, 8k resolution.`;
-  const encodedPrompt = encodeURIComponent(prompt);
-
-  // We include the index in the seed to guarantee that 4 simultaneous requests 
-  // get 4 completely distinct images, avoiding the "identical images" problem.
-  const seed = Math.floor(Math.random() * 1000000) + index;
-
-  return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=533&nologo=true&seed=${seed}`;
-}
 
 async function applyDesignModifications(originalRecommendation, modifications, creativity) {
   try {
+    const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
     const response = await axios.post(`${AI_SERVICE_URL}/modify-design`, {
       originalDesign: originalRecommendation,
       modifications,
@@ -755,6 +916,7 @@ async function applyDesignModifications(originalRecommendation, modifications, c
 
 async function analyzeImageStyle(features) {
   try {
+    const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
     const response = await axios.post(`${AI_SERVICE_URL}/analyze-style`, {
       features
     });
@@ -865,6 +1027,62 @@ async function saveRecommendationToProfile(userId, recommendationId, name, notes
   console.log(`Saved recommendation ${recommendationId} to user ${userId} profile`);
 }
 
+// Curated, room-specific Unsplash interior design photo URLs (deterministic via photo ID)
+const INTERIOR_IMAGES = {
+  'Living Room': {
+    Modern:        'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=80',
+    Scandinavian:  'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=800&q=80',
+    Contemporary:  'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=800&q=80',
+    Industrial:    'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=800&q=80',
+    Bohemian:      'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=800&q=80',
+    Traditional:   'https://images.unsplash.com/photo-1567016432779-094069958ea5?auto=format&fit=crop&w=800&q=80',
+  },
+  'Bedroom': {
+    Modern:        'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=800&q=80',
+    Scandinavian:  'https://images.unsplash.com/photo-1616594039964-ae9021a400a0?auto=format&fit=crop&w=800&q=80',
+    Contemporary:  'https://images.unsplash.com/photo-1540518614846-7eded433c457?auto=format&fit=crop&w=800&q=80',
+    Industrial:    'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=800&q=80',
+    Bohemian:      'https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?auto=format&fit=crop&w=800&q=80',
+    Traditional:   'https://images.unsplash.com/photo-1506439773649-6e0eb8cfb237?auto=format&fit=crop&w=800&q=80',
+  },
+  'Kitchen': {
+    Modern:        'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?auto=format&fit=crop&w=800&q=80',
+    Farmhouse:     'https://images.unsplash.com/photo-1583845112203-29329902332e?auto=format&fit=crop&w=800&q=80',
+    Contemporary:  'https://images.unsplash.com/photo-1565538810643-b5bdb714032a?auto=format&fit=crop&w=800&q=80',
+    Industrial:    'https://images.unsplash.com/photo-1600585152220-90363fe7e115?auto=format&fit=crop&w=800&q=80',
+    Scandinavian:  'https://images.unsplash.com/photo-1556909172-54557c7e4fb7?auto=format&fit=crop&w=800&q=80',
+    Traditional:   'https://images.unsplash.com/photo-1556909045-f3f9fdf98990?auto=format&fit=crop&w=800&q=80',
+  },
+  'Bathroom': {
+    Modern:        'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?auto=format&fit=crop&w=800&q=80',
+    Scandinavian:  'https://images.unsplash.com/photo-1600566752355-35792bedcfea?auto=format&fit=crop&w=800&q=80',
+    Contemporary:  'https://images.unsplash.com/photo-1507652313519-d4e9174996dd?auto=format&fit=crop&w=800&q=80',
+    Industrial:    'https://images.unsplash.com/photo-1620626011761-996317702149?auto=format&fit=crop&w=800&q=80',
+    Luxury:        'https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=800&q=80',
+    Traditional:   'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&w=800&q=80',
+  },
+  'Dining Room': {
+    Modern:        'https://images.unsplash.com/photo-1615968679312-9b7ed9f04e79?auto=format&fit=crop&w=800&q=80',
+    Scandinavian:  'https://images.unsplash.com/photo-1600210492493-0946911123ea?auto=format&fit=crop&w=800&q=80',
+    Contemporary:  'https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&w=800&q=80',
+    Industrial:    'https://images.unsplash.com/photo-1593702288056-f4d7b85b3a7e?auto=format&fit=crop&w=800&q=80',
+    Traditional:   'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=800&q=80',
+  },
+  'Office': {
+    Modern:        'https://images.unsplash.com/photo-1593642632559-0c6d3fc62b89?auto=format&fit=crop&w=800&q=80',
+    Scandinavian:  'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=800&q=80',
+    Contemporary:  'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=800&q=80',
+    Industrial:    'https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=800&q=80',
+    Traditional:   'https://images.unsplash.com/photo-1585336261022-680e295ce3fe?auto=format&fit=crop&w=800&q=80',
+  },
+};
+
+function getInteriorImage(roomType, style) {
+  const roomImages = INTERIOR_IMAGES[roomType] || INTERIOR_IMAGES['Living Room'];
+  // Try exact style match, then any available image for that room
+  return roomImages[style] || Object.values(roomImages)[0];
+}
+
 function generateCuratedDesignTemplates(styles, roomType, budget) {
   // Professional curated design templates for fallback scenarios
   const templates = {
@@ -878,7 +1096,7 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         budget: '$2,000-3,500',
         price: '$2,500',
         products: ['Sectional Sofa', 'Glass Coffee Table', 'Floor Lamp', 'Area Rug', 'Wall Unit'],
-        imageUrl: 'https://picsum.photos/seed/curated-lr-modern/600/400',
+        imageUrl: getInteriorImage('Living Room', 'Modern'),
         confidence: 0.95,
         isPremium: false,
         templateType: 'curated',
@@ -893,7 +1111,7 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         budget: '$1,800-2,800',
         price: '$2,200',
         products: ['Comfort Sofa', 'Wood Coffee Table', 'Pendant Lights', 'Throw Pillows', 'Plant Stand'],
-        imageUrl: 'https://picsum.photos/seed/curated-lr-scandi/600/400',
+        imageUrl: getInteriorImage('Living Room', 'Scandinavian'),
         confidence: 0.92,
         isPremium: false,
         templateType: 'curated',
@@ -908,7 +1126,7 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         budget: '$4,000-6,000',
         price: '$5,000',
         products: ['Designer Sofa', 'Marble Console', 'Chandelier', 'Art Pieces', 'Premium Rug'],
-        imageUrl: 'https://picsum.photos/seed/curated-lr-luxury/600/400',
+        imageUrl: getInteriorImage('Living Room', 'Contemporary'),
         confidence: 0.98,
         isPremium: true,
         templateType: 'curated',
@@ -923,7 +1141,7 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         budget: '$2,500-4,000',
         price: '$3,200',
         products: ['Leather Sectional', 'Metal Shelving', 'Edison Lights', 'Concrete Table', 'Metal Art'],
-        imageUrl: 'https://picsum.photos/seed/curated-lr-industrial/600/400',
+        imageUrl: getInteriorImage('Living Room', 'Industrial'),
         confidence: 0.90,
         isPremium: true,
         templateType: 'curated',
@@ -940,7 +1158,7 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         budget: '$5,000-8,000',
         price: '$6,500',
         products: ['Flat-Panel Cabinets', 'Integrated Appliances', 'Quartz Countertop', 'Under-Cabinet Lighting', 'Storage Solutions'],
-        imageUrl: 'https://picsum.photos/seed/curated-kit-modern/600/400',
+        imageUrl: getInteriorImage('Kitchen', 'Modern'),
         confidence: 0.94,
         isPremium: false,
         templateType: 'curated',
@@ -955,7 +1173,7 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         budget: '$4,000-6,500',
         price: '$5,200',
         products: ['Shaker Cabinets', 'Farmhouse Sink', 'Wood Island', 'Pendant Lights', 'Open Shelving'],
-        imageUrl: 'https://picsum.photos/seed/curated-kit-farmhouse/600/400',
+        imageUrl: getInteriorImage('Kitchen', 'Farmhouse'),
         confidence: 0.91,
         isPremium: false,
         templateType: 'curated',
@@ -970,7 +1188,7 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         budget: '$8,000-12,000',
         price: '$10,000',
         products: ['Professional Range', 'Custom Cabinetry', 'Marble Countertops', 'Wine Refrigerator', 'Smart Appliances'],
-        imageUrl: 'https://picsum.photos/seed/curated-kit-luxury/600/400',
+        imageUrl: getInteriorImage('Kitchen', 'Contemporary'),
         confidence: 0.97,
         isPremium: true,
         templateType: 'curated',
@@ -985,11 +1203,135 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         budget: '$6,000-9,000',
         price: '$7,500',
         products: ['Metal Cabinets', 'Concrete Countertops', 'Commercial Hood', 'Pipe Shelving', 'Metal Backsplash'],
-        imageUrl: 'https://picsum.photos/seed/curated-kit-industrial/600/400',
+        imageUrl: getInteriorImage('Kitchen', 'Industrial'),
         confidence: 0.89,
         isPremium: true,
         templateType: 'curated',
         styleGuide: 'Industrial kitchen design celebrating raw materials and urban aesthetics'
+      }
+    ],
+    'Bathroom': [
+      {
+        id: 'curated-bath-modern',
+        name: 'Modern Spa Bathroom',
+        description: 'Sleek modern bathroom with floating vanity, frameless shower, and minimalist fixtures',
+        style: 'Modern',
+        roomType: 'Bathroom',
+        budget: '$3,000-5,000',
+        price: '$4,000',
+        products: ['Floating Vanity', 'Frameless Shower', 'Rainfall Showerhead', 'Heated Towel Rail', 'LED Mirror'],
+        imageUrl: getInteriorImage('Bathroom', 'Modern'),
+        confidence: 0.95,
+        isPremium: false,
+        templateType: 'curated',
+        styleGuide: 'Clean lines and spa-like serenity with quality fixtures'
+      },
+      {
+        id: 'curated-bath-scandi',
+        name: 'Scandinavian Retreat Bathroom',
+        description: 'Light and airy Scandinavian bathroom with natural wood accents and soft neutral tones',
+        style: 'Scandinavian',
+        roomType: 'Bathroom',
+        budget: '$2,500-4,000',
+        price: '$3,200',
+        products: ['Wood-Accent Vanity', 'Freestanding Tub', 'Natural Stone Tiles', 'Wooden Bath Mat', 'White Fixtures'],
+        imageUrl: getInteriorImage('Bathroom', 'Scandinavian'),
+        confidence: 0.92,
+        isPremium: false,
+        templateType: 'curated',
+        styleGuide: 'Hygge-inspired bathroom with natural warmth and simplicity'
+      },
+      {
+        id: 'curated-bath-luxury',
+        name: 'Luxury Master Bathroom',
+        description: 'Hotel-inspired luxury bathroom with premium marble, soaking tub, and bespoke cabinetry',
+        style: 'Contemporary',
+        roomType: 'Bathroom',
+        budget: '$6,000-10,000',
+        price: '$8,000',
+        products: ['Freestanding Soaking Tub', 'Marble Tile', 'Custom Double Vanity', 'Smart Toilet', 'Steam Shower'],
+        imageUrl: getInteriorImage('Bathroom', 'Luxury'),
+        confidence: 0.98,
+        isPremium: true,
+        templateType: 'curated',
+        styleGuide: 'Five-star hotel bathroom experience at home'
+      },
+      {
+        id: 'curated-bath-industrial',
+        name: 'Industrial Style Bathroom',
+        description: 'Bold industrial bathroom with exposed pipes, concrete, and matte black fixtures',
+        style: 'Industrial',
+        roomType: 'Bathroom',
+        budget: '$3,500-5,500',
+        price: '$4,500',
+        products: ['Concrete Basin', 'Matte Black Fixtures', 'Open Shelving', 'Subway Tiles', 'Vintage Mirror'],
+        imageUrl: getInteriorImage('Bathroom', 'Industrial'),
+        confidence: 0.90,
+        isPremium: true,
+        templateType: 'curated',
+        styleGuide: 'Urban edge meets functional bathroom design'
+      }
+    ],
+    'Bedroom': [
+      {
+        id: 'curated-bed-modern',
+        name: 'Modern Serene Bedroom',
+        description: 'Calm, uncluttered modern bedroom with platform bed, soft lighting, and ample storage',
+        style: 'Modern',
+        roomType: 'Bedroom',
+        budget: '$2,000-3,500',
+        price: '$2,800',
+        products: ['Platform Bed', 'Floating Nightstands', 'Built-in Wardrobe', 'Pendant Lights', 'Linen Bedding'],
+        imageUrl: getInteriorImage('Bedroom', 'Modern'),
+        confidence: 0.95,
+        isPremium: false,
+        templateType: 'curated',
+        styleGuide: 'Restful minimalism for quality sleep and relaxation'
+      },
+      {
+        id: 'curated-bed-scandi',
+        name: 'Scandinavian Cozy Bedroom',
+        description: 'Warm Scandinavian bedroom with layered textiles, wood tones, and soft ambient lighting',
+        style: 'Scandinavian',
+        roomType: 'Bedroom',
+        budget: '$1,800-3,000',
+        price: '$2,300',
+        products: ['Wooden Bed Frame', 'Wool Throw', 'Rattan Lamp', 'White Linen', 'Potted Plants'],
+        imageUrl: getInteriorImage('Bedroom', 'Scandinavian'),
+        confidence: 0.92,
+        isPremium: false,
+        templateType: 'curated',
+        styleGuide: 'Hygge-inspired bedroom for ultimate comfort'
+      },
+      {
+        id: 'curated-bed-luxury',
+        name: 'Luxury Master Bedroom',
+        description: 'Opulent master bedroom with upholstered headboard, designer lighting, and premium fabrics',
+        style: 'Contemporary',
+        roomType: 'Bedroom',
+        budget: '$5,000-8,000',
+        price: '$6,500',
+        products: ['Upholstered Bed', 'Designer Dresser', 'Walk-in Wardrobe', 'Chandelier', 'Silk Bedding'],
+        imageUrl: getInteriorImage('Bedroom', 'Contemporary'),
+        confidence: 0.97,
+        isPremium: true,
+        templateType: 'curated',
+        styleGuide: 'Boutique hotel luxury in your own bedroom'
+      },
+      {
+        id: 'curated-bed-bohemian',
+        name: 'Bohemian Dream Bedroom',
+        description: 'Eclectic boho bedroom with layered rugs, macramé, plants, and warm earthy tones',
+        style: 'Bohemian',
+        roomType: 'Bedroom',
+        budget: '$1,500-2,500',
+        price: '$2,000',
+        products: ['Canopy Bed', 'Layered Rugs', 'Macramé Wall Hanging', 'Rattan Furniture', 'String Lights'],
+        imageUrl: getInteriorImage('Bedroom', 'Bohemian'),
+        confidence: 0.88,
+        isPremium: false,
+        templateType: 'curated',
+        styleGuide: 'Free-spirited, textured bedroom full of personality'
       }
     ]
   };
@@ -1004,9 +1346,7 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         template.style.toLowerCase().includes(style.toLowerCase())
       )
     );
-
-    // If filtered results are too few, return all templates
-    if (filtered.length >= 2) {
+    if (filtered.length >= 1) {
       return filtered.slice(0, 4);
     }
   }
@@ -1015,59 +1355,22 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
 }
 
 function generateMockRecommendations(styles, roomType, budget) {
-  // Generate 4 mock recommendations when AI service is unavailable
+  const room = roomType || 'Living Room';
+  const style = styles[0] || 'Modern';
   return [
     {
       id: 'mock-1',
-      name: 'Modern Minimalist Set',
-      description: 'Clean lines and minimalist design with functional furniture pieces',
-      style: styles[0] || 'Modern',
-      roomType,
-      budget,
+      name: `${style} ${room} Design`,
+      description: `Clean, well-considered ${style.toLowerCase()} design tailored for a ${room.toLowerCase()} within your budget`,
+      style,
+      roomType: room,
+      budget: budget || '$1,000-2,500',
       price: '$1,500-2,000',
-      products: ['Modern Sofa', 'Glass Coffee Table', 'Minimalist Floor Lamp'],
-      imageUrl: getInteriorImageUrl(styles[0] || 'Modern', roomType),
+      products: ['Primary Furniture Piece', 'Accent Lighting', 'Area Rug', 'Decorative Accessories'],
+      imageUrl: getInteriorImage(room, style),
       confidence: 0.85,
-      isPremium: false
-    },
-    {
-      id: 'mock-2',
-      name: 'Scandinavian Comfort',
-      description: 'Cozy and inviting Scandinavian design with natural materials and soft textures',
-      style: styles[1] || 'Scandinavian',
-      roomType,
-      budget,
-      price: '$1,200-1,800',
-      products: ['Cozy Armchair', 'Wood Side Table', 'Soft Throw Pillows'],
-      imageUrl: getInteriorImageUrl(styles[1] || 'Scandinavian', roomType),
-      confidence: 0.78,
-      isPremium: false
-    },
-    {
-      id: 'mock-3',
-      name: 'Luxury Contemporary',
-      description: 'High-end contemporary design with premium materials and sophisticated styling',
-      style: styles[0] || 'Contemporary',
-      roomType,
-      budget,
-      price: '$3,000-4,500',
-      products: ['Designer Sofa', 'Marble Coffee Table', 'Designer Lighting'],
-      imageUrl: getInteriorImageUrl(styles[0] || 'Contemporary', roomType),
-      confidence: 0.92,
-      isPremium: true
-    },
-    {
-      id: 'mock-4',
-      name: 'Premium Industrial',
-      description: 'Industrial chic design with raw materials and bold architectural elements',
-      style: styles[1] || 'Industrial',
-      roomType,
-      budget,
-      price: '$2,500-3,500',
-      products: ['Leather Sectional', 'Metal Console', 'Industrial Pendant'],
-      imageUrl: getInteriorImageUrl(styles[1] || 'Industrial', roomType),
-      confidence: 0.89,
-      isPremium: true
+      isPremium: false,
+      details: { materials: [], dimensions: 'Standard dimensions', colorPalette: ['#F5F5F5', '#2C2C2C'], implementationTips: [] }
     }
   ];
 }
@@ -1075,6 +1378,11 @@ function generateMockRecommendations(styles, roomType, budget) {
 // Get user's saved AI recommendations
 router.get('/saved', authenticateToken, async (req, res) => {
   try {
+    // Check if user is authenticated
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ error: 'Authentication required', message: 'You must be logged in to view your saved recommendations' });
+    }
+    
     // Strict security: use authenticated user from token
     const userId = req.user.userId;
     const { page = 1, limit = 10 } = req.query;

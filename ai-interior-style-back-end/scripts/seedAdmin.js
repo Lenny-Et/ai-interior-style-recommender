@@ -16,7 +16,7 @@ const seedAdmin = async () => {
     await mongoose.connect(MONGODB_URI);
     console.log('Connected to MongoDB');
 
-    const adminEmail = 'admin@homitify.com';
+    const adminEmail = 'homitify.admin@gmail.com';
     const adminPassword = 'AdminPassword123!';
 
     const existingAdmin = await User.findOne({ email: adminEmail });

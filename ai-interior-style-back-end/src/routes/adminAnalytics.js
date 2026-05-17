@@ -237,7 +237,7 @@ router.get('/users', authenticateToken, async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum)
-      .select('profile.firstName profile.lastName email role status createdAt lastLogin');
+      .select('profile.firstName profile.lastName email role status createdAt lastLogin approvalStatus isPro');
 
     const total = await User.countDocuments(query);
 

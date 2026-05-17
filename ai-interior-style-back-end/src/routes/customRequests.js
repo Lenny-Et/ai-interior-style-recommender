@@ -434,8 +434,12 @@ router.get('/chat/premium-status', authenticateToken, async (req, res) => {
     }
 
     // Check homeowner premium access
-    const { checkPremiumAccess } = await import('../middleware/premiumAccess.js');
-    const hasPremiumAccess = await checkPremiumAccess(userId);
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const hasPremiumAccess = user.isPro;
 
     res.json({
       hasPremiumAccess,

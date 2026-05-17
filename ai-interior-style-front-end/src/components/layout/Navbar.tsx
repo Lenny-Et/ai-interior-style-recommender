@@ -3,6 +3,7 @@ import { useAppStore } from "@/lib/store";
 import { Bell, Menu, Search, Moon, Sun, Command } from "lucide-react";
 import Link from "next/link";
 import Avatar from "@/components/ui/Avatar";
+import Badge from "@/components/ui/Badge";
 import { useState } from "react";
 import NotificationPanel from "./NotificationPanel";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,11 @@ export default function Navbar() {
 
       {/* Right: Actions */}
       <div className="flex items-center gap-1 ml-auto">
+        {user && !user.isPro && (
+          <Link href="/dashboard/settings" className="text-sm font-medium text-brand-400 hover:text-brand-300 transition-colors px-3 py-2 rounded-lg bg-brand-600/10 border border-brand-500/30">
+            Upgrade to Pro
+          </Link>
+        )}
         {/* Theme Toggle */}
         <button
           id="theme-toggle"
@@ -68,7 +74,8 @@ export default function Navbar() {
         </div>
 
         {/* User avatar */}
-        <Link href="/dashboard" className="ml-1">
+        <Link href="/dashboard" className="ml-1 flex items-center gap-2">
+          {user?.isPro && <Badge variant="green">PRO</Badge>}
           <Avatar src={user?.avatarUrl} name={user?.name} size="sm" verified={user?.verified} />
         </Link>
       </div>

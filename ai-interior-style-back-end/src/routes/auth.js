@@ -1,7 +1,7 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
-import { sendPasswordResetEmail } from '../services/emailService.js';
+import { sendPasswordResetEmail, sendNewDesignerSignupEmail } from '../services/emailService.js';
 import { generatePasswordResetToken, validatePasswordResetToken, markTokenAsUsed } from '../utils/tokenUtils.js';
 import asyncHandler from '../middleware/asyncHandler.js';
 
@@ -20,10 +20,16 @@ router.post('/register', asyncHandler(async (req, res) => {
     email,
     passwordHash: password, // Pre-save hook will hash this
     role: role || 'homeowner',
-    profile
+    profile,
+    ...(role === 'designer' && { approvalStatus: 'pending' })
   });
 
   await newUser.save();
+
+  if (newUser.role === 'designer') {
+    const designerName = newUser.profile?.firstName ? `${newUser.profile.firstName} ${newUser.profile.lastName || ''}`.trim() : newUser.email;
+    await sendNewDesignerSignupEmail(newUser.email, designerName);
+  }
 
   res.status(201).json({ message: 'User registered successfully', userId: newUser._id });
 }));
@@ -37,12 +43,12 @@ router.post('/login', asyncHandler(async (req, res) => {
   }
 
   const token = jwt.sign(
-    { userId: user._id, role: user.role, is_verified: user.is_verified },
+    { userId: user._id, role: user.role, approvalStatus: user.approvalStatus, isPro: user.isPro },
     JWT_SECRET,
     { expiresIn: '24h' }
   );
 
-  res.json({ token, role: user.role, is_verified: user.is_verified });
+  res.json({ token, role: user.role, approvalStatus: user.approvalStatus, isPro: user.isPro });
 }));
 
 // Forgot Password

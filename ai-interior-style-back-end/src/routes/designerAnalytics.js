@@ -6,12 +6,12 @@ import { Save } from '../models/Save.js';
 import { Follow } from '../models/Follow.js';
 import { CustomRequest } from '../models/CustomRequest.js';
 import { Transaction } from '../models/Transaction.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, requireApprovedDesigner } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // Get designer analytics overview
-router.get('/overview', authenticateToken, async (req, res) => {
+router.get('/overview', authenticateToken, requireApprovedDesigner, async (req, res) => {
   try {
     const userId = req.user.userId;
     const userRole = req.user.role;
@@ -153,7 +153,7 @@ router.get('/overview', authenticateToken, async (req, res) => {
 });
 
 // Get designer earnings data
-router.get('/earnings', authenticateToken, async (req, res) => {
+router.get('/earnings', authenticateToken, requireApprovedDesigner, async (req, res) => {
   try {
     const userId = req.user.userId;
     const userRole = req.user.role;

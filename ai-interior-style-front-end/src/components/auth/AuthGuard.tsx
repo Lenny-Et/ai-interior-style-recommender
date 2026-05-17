@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAppStore } from "@/lib/store";
 import { Sparkles } from "lucide-react";
 
@@ -17,6 +17,7 @@ export default function AuthGuard({
 }: AuthGuardProps) {
   const { user, isAuthenticated, isLoading } = useAppStore();
   const router = useRouter();
+  const pathname = usePathname();
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
@@ -47,6 +48,19 @@ export default function AuthGuard({
           admin: "/admin"
         };
         router.push(redirectMap[user.role] || "/dashboard");
+        return;
+      }
+
+      // If designer, check approval status
+      if (user.role === 'designer' && user.approvalStatus !== 'approved') {
+        // Allow access to the pending approval page itself
+        if (pathname === '/designer/pending-approval') {
+          console.log('AuthGuard - Designer pending approval, allowing access to pending-approval page');
+          setIsChecking(false);
+          return;
+        }
+        console.log('AuthGuard - Designer not approved, redirecting to pending approval page');
+        router.push('/designer/pending-approval');
         return;
       }
 

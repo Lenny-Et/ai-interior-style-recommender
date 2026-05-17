@@ -11,7 +11,7 @@ const transactionSchema = new mongoose.Schema({
   commissionAmount: { type: Number, default: 0 },
   designerPayout: { type: Number, default: 0 },
   webhookData: { type: Object },
-  purchaseType: { type: String, enum: ['ai_design', 'designer_service'], default: 'designer_service' }, // Track purchase type
+  purchaseType: { type: String, enum: ['ai_design', 'designer_service', 'pro_upgrade'], default: 'designer_service' }, // Track purchase type
   sessionId: { type: String } // For AI design purchases
 }, { timestamps: true });
 

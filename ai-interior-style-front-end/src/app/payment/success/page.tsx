@@ -2,6 +2,8 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
+import { useAppStore } from "@/lib/store";
+import toast from "react-hot-toast";
 import Button from "@/components/ui/Button";
 import { CheckCircle, XCircle, Loader2, ArrowRight } from "lucide-react";
 import Link from "next/link";
@@ -14,6 +16,8 @@ function PaymentSuccessContent() {
 
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState("");
+
+  const { user, setUser } = useAppStore();
 
   useEffect(() => {
     if (!tx_ref) {
@@ -29,6 +33,13 @@ function PaymentSuccessContent() {
 
         if (data.success || data.status === "success" || data.status === "held_in_escrow") {
           setStatus("success");
+          
+          // Handle Pro Upgrade specific logic
+          if (tx_ref.startsWith('pro-upgrade-') && user && !user.isPro) {
+            setUser({ ...user, isPro: true }); // Update local state
+            toast.success("Your account has been upgraded to Pro!");
+          }
+
           // Auto-redirect back to the AI session so user sees their unlocked designs
           if (sessionId) {
             setTimeout(() => {
@@ -46,7 +57,7 @@ function PaymentSuccessContent() {
     };
 
     verifyTransaction();
-  }, [tx_ref, sessionId, router]);
+  }, [tx_ref, sessionId, router, user, setUser]);
 
   return (
     <div className="min-h-[70vh] flex items-center justify-center">

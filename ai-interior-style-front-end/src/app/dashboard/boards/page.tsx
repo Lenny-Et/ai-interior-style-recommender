@@ -530,7 +530,6 @@ export default function StyleBoardsPage() {
                   <div className="flex gap-2 mt-3">
                     <Button variant="ghost" size="sm" className="flex-1" onClick={() => showBoardDetails(board)}><FolderHeart className="w-3.5 h-3.5" /> Details</Button>
                     <Button variant="ghost" size="sm" className="flex-1" onClick={() => startEditBoard(board)}><Edit className="w-3.5 h-3.5" /> Edit</Button>
-                    <Button variant="ghost" size="sm" className="flex-1" onClick={() => analyzeBoardWithAI(board)} loading={loadingAI && selectedBoardForAI?._id === board._id}><Brain className="w-3.5 h-3.5" /> AI</Button>
                     <Button variant="ghost" size="sm" className="flex-1" onClick={() => deleteBoard(board._id)}><Trash2 className="w-3.5 h-3.5" /> Delete</Button>
                   </div>
                 </div>

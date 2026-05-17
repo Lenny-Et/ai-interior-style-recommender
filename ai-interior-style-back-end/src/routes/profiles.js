@@ -15,6 +15,8 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    console.log('User data from /profiles/:id:', user); // Add this line for debugging
+
     // Get additional profile data based on role
     let profileData = {
       _id: user._id,

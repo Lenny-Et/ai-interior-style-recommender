@@ -7,6 +7,7 @@ import { UserDesignLibrary } from '../models/UserDesignLibrary.js';
 import { AIRecommendation } from '../models/AIRecommendation.js';
 import { CustomRequest } from '../models/CustomRequest.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { User } from '../models/User.js';
 
 const router = express.Router();
 
@@ -56,6 +57,48 @@ router.post('/initialize', async (req, res) => {
     res.json({ checkoutUrl: paymentLink.data.checkout_url, tx_ref });
   } catch (error) {
     console.error('Payment initialization error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Initiate Pro Account Upgrade Payment
+router.post('/initiate-pro-upgrade', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (user.isPro) {
+      return res.status(400).json({ error: 'User already has a Pro account' });
+    }
+
+    const PRO_UPGRADE_AMOUNT = 12; // $12 for forever pro account
+    const tx_ref = `pro-upgrade-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+    // Create a transaction record for the pro upgrade
+    const tx = new Transaction({
+      homeownerId: userId, // User upgrading is the homeowner
+      amount: PRO_UPGRADE_AMOUNT,
+      tx_ref,
+      purchaseType: 'pro_upgrade',
+      description: 'Forever Pro Account Upgrade'
+    });
+    await tx.save();
+
+    const paymentLink = await initializePayment(
+      PRO_UPGRADE_AMOUNT,
+      user.email,
+      user.profile?.firstName,
+      user.profile?.lastName,
+      tx_ref,
+      null // No session ID for pro upgrade
+    );
+
+    res.json({ checkoutUrl: paymentLink.data.checkout_url, tx_ref });
+  } catch (error) {
+    console.error('Pro upgrade payment initialization error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -111,6 +154,23 @@ router.post('/verify', async (req, res) => {
         } else {
           console.warn('No sessionId available — cannot save designs to library');
         }
+      } else if (tx.purchaseType === 'pro_upgrade') {
+        const user = await User.findById(tx.homeownerId);
+        if (user) {
+          user.isPro = true;
+          await user.save();
+          console.log(`User ${tx.homeownerId} upgraded to Pro account.`);
+        }
+        await PremiumPurchase.create({
+          userId: tx.homeownerId,
+          purchaseType: 'pro_upgrade',
+          itemId: tx_ref,
+          transactionId: tx._id,
+          amount: tx.amount,
+          status: 'completed',
+          expiresAt: null // Forever pro account
+        });
+        console.log(`Pro account access granted for user ${tx.homeownerId}`);
       } else {
         await PremiumPurchase.create({
           userId: tx.homeownerId,
@@ -187,7 +247,7 @@ router.post('/webhook', async (req, res) => {
       const { homeownerId, designerId, tx_ref, amount } = result;
       
       // Determine purchase type and grant access
-      if (designerId === 'ai-system') {
+      if (result.purchaseType === 'ai_design') {
         // AI design purchase
         await PremiumPurchase.create({
           userId: homeownerId,
@@ -198,6 +258,23 @@ router.post('/webhook', async (req, res) => {
           status: 'completed'
         });
         console.log(`Premium AI design access granted for user ${homeownerId}`);
+      } else if (result.purchaseType === 'pro_upgrade') {
+        const user = await User.findById(homeownerId);
+        if (user) {
+          user.isPro = true;
+          await user.save();
+          console.log(`User ${homeownerId} upgraded to Pro account via webhook.`);
+        }
+        await PremiumPurchase.create({
+          userId: homeownerId,
+          purchaseType: 'pro_upgrade',
+          itemId: tx_ref,
+          transactionId: result._id,
+          amount,
+          status: 'completed',
+          expiresAt: null // Forever pro account
+        });
+        console.log(`Pro account access granted for user ${homeownerId} via webhook.`);
       } else {
         // Designer service purchase
         await PremiumPurchase.create({
@@ -540,31 +617,6 @@ router.post('/grant-access', async (req, res) => {
     });
   } catch (error) {
     console.error('Grant access error:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Get user premium purchases
-router.get('/premium/purchases', async (req, res) => {
-  try {
-    const { userId, purchaseType } = req.query;
-    
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-    
-    const query = { userId };
-    if (purchaseType) {
-      query.purchaseType = purchaseType;
-    }
-    
-    const purchases = await PremiumPurchase.find(query)
-      .sort({ createdAt: -1 })
-      .limit(10);
-    
-    res.json(purchases);
-  } catch (error) {
-    console.error('Get premium purchases error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

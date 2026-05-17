@@ -13,6 +13,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { formatDate, cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api-client";
+import DesignerDetailsModal from "@/components/admin/DesignerDetailsModal";
 
 type Role = "homeowner" | "designer" | "admin";
 type UserStatus = "active" | "suspended" | "pending";
@@ -29,6 +30,8 @@ interface BackendUser {
   role: Role;
   is_verified?: boolean;
   status?: UserStatus;
+  approvalStatus?: "pending" | "approved" | "rejected"; // Added for designers
+  isPro?: boolean; // Added for pro accounts
   createdAt: string;
   portfolioCount?: number;
   followerCount?: number;
@@ -48,6 +51,12 @@ const STATUS_VARIANT: Record<UserStatus, "green"|"red"|"gray"> = {
   pending: "gray" 
 };
 
+const APPROVAL_STATUS_VARIANT: Record<NonNullable<BackendUser['approvalStatus']>, "gold"|"green"|"red"> = {
+  pending: "gold",
+  approved: "green",
+  rejected: "red",
+};
+
 export default function UserManagementPage() {
   const [users, setUsers] = useState<BackendUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,6 +69,8 @@ export default function UserManagementPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
   const [showGuidelines, setShowGuidelines] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedDesignerId, setSelectedDesignerId] = useState<string | null>(null);
 
   const fetchUsers = useCallback(async (page = 1, searchQuery = "", role = "all", status = "all", sort = "joined", order = "desc") => {
     try {
@@ -127,15 +138,46 @@ export default function UserManagementPage() {
 
   const toggleVerification = async (userId: string, currentVerified: boolean) => {
     try {
-      await apiClient.updateUserStatus(userId, currentVerified ? 'unverified' : 'verified');
+      await apiClient.toggleUserVerification(userId, !currentVerified);
       setUsers((prev) => prev.map((u) => 
         u._id === userId ? { ...u, is_verified: !currentVerified } : u
       ));
-      toast.success(`User ${currentVerified ? 'unverified' : 'verified'} successfully`);
+      toast.success(`User ${!currentVerified ? 'verified' : 'unverified'} successfully`);
     } catch (err: any) {
       console.error('Failed to toggle verification:', err);
       toast.error(err?.error || 'Failed to update verification status');
     }
+  };
+
+  const approveDesigner = async (userId: string) => {
+    try {
+      await apiClient.approveDesigner(userId, 'approved');
+      setUsers((prev) => prev.map((u) => 
+        u._id === userId ? { ...u, approvalStatus: 'approved' } : u
+      ));
+      toast.success('Designer approved successfully!');
+    } catch (err: any) {
+      console.error('Failed to approve designer:', err);
+      toast.error(err?.error || 'Failed to approve designer');
+    }
+  };
+
+  const rejectDesigner = async (userId: string) => {
+    try {
+      await apiClient.approveDesigner(userId, 'rejected');
+      setUsers((prev) => prev.map((u) => 
+        u._id === userId ? { ...u, approvalStatus: 'rejected' } : u
+      ));
+      toast.success('Designer rejected successfully!');
+    } catch (err: any) {
+      console.error('Failed to reject designer:', err);
+      toast.error(err?.error || 'Failed to reject designer');
+    }
+  };
+
+  const handleViewDetails = (userId: string) => {
+    setSelectedDesignerId(userId);
+    setShowDetailsModal(true);
   };
 
   const getUserName = (user: BackendUser) => {
@@ -285,7 +327,18 @@ export default function UserManagementPage() {
                         <option value="admin">Admin</option>
                       </select>
                     </td>
-                    <td><Badge variant={u.status ? STATUS_VARIANT[u.status] : "gray"}>{u.status || "unknown"}</Badge></td>
+                    <td>
+                      {u.role === "designer" ? (
+                        <div className="flex items-center gap-2">
+                          <Badge variant={u.approvalStatus ? APPROVAL_STATUS_VARIANT[u.approvalStatus] : "gray"}>
+                            {u.approvalStatus || "unknown"}
+                          </Badge>
+                          {u.isPro && <Badge variant="purple">PRO</Badge>}
+                        </div>
+                      ) : (
+                        <Badge variant={u.status ? STATUS_VARIANT[u.status] : "gray"}>{u.status || "unknown"}</Badge>
+                      )}
+                    </td>
                     <td>
                       {u.role === "designer" ? (
                         <div className="flex items-center gap-2 text-xs text-text-muted">
@@ -311,6 +364,33 @@ export default function UserManagementPage() {
                         >
                           <CheckCircle className="w-3.5 h-3.5" />
                         </button>
+                        {u.role === "designer" && u.approvalStatus === "pending" && (
+                          <>
+                            <button
+                              onClick={() => approveDesigner(u._id)}
+                              title="Approve Designer"
+                              className="w-7 h-7 rounded-lg border border-green-500/40 bg-green-600/10 text-green-400 flex items-center justify-center transition-all hover:brightness-110"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => rejectDesigner(u._id)}
+                              title="Reject Designer"
+                              className="w-7 h-7 rounded-lg border border-red-500/40 bg-red-600/10 text-red-400 flex items-center justify-center transition-all hover:brightness-110"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                        {u.role === "designer" && (
+                          <button
+                            onClick={() => handleViewDetails(u._id)}
+                            title="View Designer Details"
+                            className="w-7 h-7 rounded-lg border border-blue-500/40 bg-blue-600/10 text-blue-400 flex items-center justify-center transition-all hover:brightness-110"
+                          >
+                            <Info className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => updateUserStatus(u._id, u.status === 'suspended' ? 'active' : 'suspended')}
                           title={u.status === "suspended" ? "Unsuspend" : "Suspend"}
@@ -339,6 +419,11 @@ export default function UserManagementPage() {
       )}
 
       <GuidelinesModal show={showGuidelines} onClose={() => setShowGuidelines(false)} />
+      <DesignerDetailsModal 
+        userId={selectedDesignerId} 
+        show={showDetailsModal} 
+        onClose={() => setShowDetailsModal(false)} 
+      />
     </div>
   );
 }

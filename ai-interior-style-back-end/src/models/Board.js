@@ -26,7 +26,16 @@ const boardSchema = new mongoose.Schema({
   },
   coverImage: {
     type: String
-  }
+  },
+  items: [{
+    imageUrl:    { type: String, required: true },
+    name:        { type: String, default: '' },
+    style:       { type: String, default: '' },
+    roomType:    { type: String, default: '' },
+    description: { type: String, default: '' },
+    source:      { type: String, default: 'ai_recommendation' },
+    addedAt:     { type: Date, default: Date.now }
+  }]
 }, { 
   timestamps: true 
 });
