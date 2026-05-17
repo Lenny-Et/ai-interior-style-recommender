@@ -33,6 +33,7 @@ router.get('/', authenticateToken, async (req, res) => {
           targetType: 'board',
           targetId: board._id
         });
+        const totalCount = saveCount + (board.items?.length || 0);
         
         // Get sample items for the board (portfolio items saved to this board)
         const sampleItems = await Save.find({
@@ -45,10 +46,21 @@ router.get('/', authenticateToken, async (req, res) => {
         })
         .limit(3);
 
+        // Combine portfolio sample items and embedded AI items
+        const portfolioSamples = sampleItems.map(save => save.targetId).filter(item => item);
+        const aiSamples = (board.items || []).map(item => ({
+          _id: item._id,
+          imageUrl: item.imageUrl,
+          metadata: { style: item.style, roomType: item.roomType, description: item.description },
+          source: 'ai_recommendation'
+        }));
+        
+        const combinedSamples = [...aiSamples, ...portfolioSamples].slice(0, 3);
+
         return {
           ...board.toObject(),
-          saveCount,
-          sampleItems: sampleItems.map(save => save.targetId).filter(item => item)
+          saveCount: totalCount,
+          sampleItems: combinedSamples
         };
       })
     );
@@ -191,6 +203,41 @@ router.post('/:boardId/items', authenticateToken, async (req, res) => {
   }
 });
 
+// Add AI item to board
+router.post('/:boardId/ai-items', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { boardId } = req.params;
+    const { imageUrl, name, style, roomType, description } = req.body;
+
+    if (!imageUrl) {
+      return res.status(400).json({ error: 'Image URL is required' });
+    }
+
+    const board = await Board.findOne({ _id: boardId, userId });
+    if (!board) {
+      return res.status(404).json({ error: 'Board not found' });
+    }
+
+    // Add to embedded items array
+    board.items.push({
+      imageUrl,
+      name,
+      style,
+      roomType,
+      description,
+      source: 'ai_recommendation'
+    });
+
+    await board.save();
+
+    res.status(201).json({ message: 'AI item added to board successfully', board });
+  } catch (error) {
+    console.error('Add AI item to board error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Remove item from board
 router.delete('/:boardId/items/:itemId', authenticateToken, async (req, res) => {
   try {
@@ -202,10 +249,18 @@ router.delete('/:boardId/items/:itemId', authenticateToken, async (req, res) => 
       return res.status(404).json({ error: 'Board not found' });
     }
 
-    await Save.findOneAndDelete({
-      userId,
-      targetId: itemId
-    });
+    // Try removing from embedded items first
+    const itemIndex = board.items.findIndex(item => item._id.toString() === itemId);
+    if (itemIndex > -1) {
+      board.items.splice(itemIndex, 1);
+      await board.save();
+    } else {
+      // If not embedded, remove from Save collection
+      await Save.findOneAndDelete({
+        userId,
+        targetId: itemId
+      });
+    }
 
     res.json({ message: 'Item removed from board successfully' });
   } catch (error) {
@@ -242,17 +297,31 @@ router.get('/:boardId/items', authenticateToken, async (req, res) => {
     .skip(skip)
     .limit(limitNum);
 
-    const items = saves
+    const portfolioItems = saves
       .map(save => save.targetId)
       .filter(item => item); // Filter out null items
 
-    const total = await Save.countDocuments({
-      userId,
-      targetType: 'portfolio'
-    });
+    // Format embedded AI items to match the expected shape
+    const aiItems = (board.items || []).map(item => ({
+      _id: item._id,
+      imageUrl: item.imageUrl,
+      metadata: { style: item.style, roomType: item.roomType, description: item.description },
+      source: item.source,
+      createdAt: item.addedAt
+    }));
+
+    // Combine and sort
+    const allItems = [...aiItems, ...portfolioItems].sort((a, b) => 
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    // Manual pagination for combined items
+    const paginatedItems = allItems.slice(skip, skip + limitNum);
+
+    const total = allItems.length;
 
     res.json({
-      items,
+      items: paginatedItems,
       board,
       pagination: {
         page: pageNum,

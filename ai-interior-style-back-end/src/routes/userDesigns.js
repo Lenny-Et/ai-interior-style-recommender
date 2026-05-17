@@ -7,9 +7,16 @@ const router = express.Router();
 // Get user's design library
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    // Check if user is authenticated
+    if (!req.user || !req.user.userId) {
+      console.error('Authentication failed: req.user or req.user.userId is missing');
+      return res.status(401).json({ error: 'Authentication required', message: 'You must be logged in to view your design library' });
+    }
+    
     // Strict security: ALWAYS use the authenticated user's ID from the JWT token.
     // Never trust req.query.userId from the client, otherwise users can view others' data.
     const userId = req.user.userId;
+    console.log(`Fetching designs for userId: ${userId}`);
     const { 
       page = 1, 
       limit = 20, 
