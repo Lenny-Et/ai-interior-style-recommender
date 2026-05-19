@@ -265,7 +265,7 @@ export default function DesignerSearchPage() {
                   {/* Actions */}
                   <div className="flex gap-2 mb-2">
                     <Button
-                      variant={isFollowing ? "default" : "ghost"}
+                      variant={isFollowing ? "brand" : "ghost"}
                       size="sm"
                       className="flex-1"
                       onClick={() => handleFollow(d._id)}

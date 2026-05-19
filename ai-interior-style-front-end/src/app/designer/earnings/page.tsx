@@ -60,17 +60,6 @@ export default function EarningsPage() {
     }
   };
 
-  const handleRequestEarlyRelease = async () => {
-    try {
-      toast.loading('Requesting early release...');
-      // This would call an API endpoint to request early release
-      // For now, we'll show a success message
-      toast.success('Early release request submitted for review');
-    } catch (error: any) {
-      toast.error(error.error || error.message || "Failed to request early release");
-    }
-  };
-
   const handleReleaseFundsManually = async (txRef: string) => {
     try {
       toast.loading('Releasing funds...');
@@ -129,8 +118,8 @@ export default function EarningsPage() {
   }
 
   const totalGross = earnings.totalEarnings;
-  const platformFee = Math.round(totalGross * 0.12);
-  const netEarnings = totalGross - platformFee;
+  const platformFee = earnings.totalCommission;
+  const netEarnings = earnings.netEarnings;
   const pendingPayout = earnings.pendingAmount;
 
   const MONTHLY = earnings.monthlyEarnings.map((month) => ({
@@ -205,7 +194,6 @@ export default function EarningsPage() {
             <h2 className="font-semibold text-white mb-1">You have ${pendingPayout.toLocaleString()} awaiting release</h2>
             <p className="text-sm text-text-muted">Funds held in escrow until project completion. Release automatically upon client approval.</p>
           </div>
-          <Button variant="gold" onClick={handleRequestEarlyRelease}>Request Early Release</Button>
         </div>
       )}
 

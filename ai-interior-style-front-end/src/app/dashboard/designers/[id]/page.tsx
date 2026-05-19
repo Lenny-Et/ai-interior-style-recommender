@@ -167,7 +167,7 @@ export default function DesignerProfilePage() {
             {/* Action buttons */}
             <div className="flex flex-wrap gap-3">
               <Button
-                variant={following ? "default" : "ghost"}
+                variant={following ? "brand" : "ghost"}
                 onClick={handleFollow}
                 disabled={followLoading}
               >

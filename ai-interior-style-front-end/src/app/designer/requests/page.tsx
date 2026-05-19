@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card, { CardBody, CardHeader } from "@/components/ui/Card";
@@ -51,6 +51,11 @@ interface CustomRequest {
     sender: string;
     message: string;
     createdAt: string;
+    attachments?: Array<{
+      url: string;
+      filename: string;
+      originalName: string;
+    }>;
   }>;
 }
 
@@ -73,11 +78,22 @@ export default function DesignerRequestsPage() {
   const [appliedSet, setAppliedSet] = useState<Set<string>>(new Set());
   const [applyNote, setApplyNote] = useState("");
   const [showNoteFor, setShowNoteFor] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const allRequests = showAvailable ? availableRequests : requests;
+  const ticket = allRequests.find((r) => r._id === active);
 
   useEffect(() => {
     loadRequests();
     loadAvailableRequests();
   }, []);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollTop = messagesEndRef.current.scrollHeight;
+    }
+  }, [ticket?.messages]);
 
   const loadRequests = async () => {
     try {
@@ -161,9 +177,6 @@ export default function DesignerRequestsPage() {
       toast.error(error.error || error.message || "Failed to send message");
     }
   };
-
-  const allRequests = showAvailable ? availableRequests : requests;
-  const ticket = allRequests.find((r) => r._id === active);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -251,7 +264,7 @@ export default function DesignerRequestsPage() {
 
         {/* Detail */}
         {ticket ? (
-          <Card className="overflow-hidden">
+          <Card className="overflow-hidden flex flex-col h-[600px]">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -303,59 +316,90 @@ export default function DesignerRequestsPage() {
                 </div>
               </div>
             </CardHeader>
-            <CardBody className="space-y-5">
-              <div>
-                <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Client Brief</p>
-                <p className="text-sm text-purple-100 leading-relaxed">{ticket.description}</p>
+            <CardBody className="flex-1 flex flex-col space-y-4 overflow-hidden">
+              <div className="shrink-0 space-y-4">
+                <div>
+                  <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Client Brief</p>
+                  <p className="text-sm text-purple-100 leading-relaxed line-clamp-2 hover:line-clamp-none transition-all cursor-pointer" title="Click to expand">
+                    {ticket.description}
+                  </p>
+                </div>
+
+                {ticket.attachments && ticket.attachments.length > 0 && (
+                  <div>
+                    <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Client Room Photos</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {ticket.attachments.map((attachment, i) => (
+                        <img key={i} src={attachment.url} alt={attachment.originalName} className="w-16 h-12 object-cover rounded-lg border border-surface-border hover:opacity-80 cursor-pointer transition-opacity" />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {ticket.status === "Review" && (
+                  <div className="p-3 rounded-xl border border-gold-500/20 bg-gold-500/5 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 text-gold-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-gold-300">Awaiting Client Approval</p>
+                      <p className="text-[10px] text-text-muted mt-0.5">Funds will be released once client approves.</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {ticket.attachments && ticket.attachments.length > 0 && (
-                <div>
-                  <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Client Room Photos</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {ticket.attachments.map((attachment, i) => (
-                      <img key={i} src={attachment.url} alt={attachment.originalName} className="w-32 h-24 object-cover rounded-xl border border-surface-border hover:opacity-80 cursor-pointer transition-opacity" />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {ticket.status === "Review" && (
-                <div className="p-3 rounded-xl border border-gold-500/20 bg-gold-500/5 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-gold-400 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-semibold text-gold-300">Awaiting Client Approval</p>
-                    <p className="text-[10px] text-text-muted mt-0.5">Funds will be released once client approves.</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Messages */}
-              {ticket.messages && ticket.messages.length > 0 && (
-                <div>
-                  <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Messages</p>
-                  <div className="space-y-2 max-h-32 overflow-y-auto">
-                    {ticket.messages.map((msg, i) => (
-                      <div key={i} className="text-xs mb-3">
-                        {msg.attachments && msg.attachments.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mb-1 mt-1">
-                            {msg.attachments.map((file, idx) => (
-                              <img key={idx} src={file.url} alt="attachment" className="w-20 h-20 object-cover rounded-md border border-surface-border" />
-                            ))}
-                          </div>
+              {/* Messages (Scrollable) */}
+              <div className="flex-1 flex flex-col min-h-0 border-t border-surface-border pt-4">
+                <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-3 shrink-0">Messages</p>
+                <div ref={messagesEndRef} className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-surface-border">
+                  {ticket.messages && ticket.messages.length > 0 ? (
+                    ticket.messages.map((msg, i) => (
+                      <div
+                        key={i}
+                        className={cn(
+                          "flex gap-2",
+                          msg.sender === "designer" ? "justify-end" : "justify-start"
                         )}
-                        <span className="font-medium text-white">{msg.sender}:</span> {msg.message}
-                        <span className="text-text-muted ml-2">{formatDate(msg.createdAt)}</span>
+                      >
+                        {msg.sender === "homeowner" && (
+                          <Avatar
+                            name={`${ticket.homeownerId.profile.firstName} ${ticket.homeownerId.profile.lastName}`}
+                            size="xs"
+                          />
+                        )}
+                        <div
+                          className={cn(
+                            "max-w-[80%] rounded-2xl px-4 py-2",
+                            msg.sender === "designer"
+                              ? "bg-brand-600 text-white"
+                              : "bg-surface border border-surface-border text-purple-100"
+                          )}
+                        >
+                          {msg.attachments && msg.attachments.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-2">
+                              {msg.attachments.map((file: any, idx: number) => (
+                                <img key={idx} src={file.url} alt="attachment" className="w-32 h-32 object-cover rounded-xl" />
+                              ))}
+                            </div>
+                          )}
+                          <p className="text-sm">{msg.message}</p>
+                          <p className="text-[10px] opacity-70 mt-1">
+                            {formatDate(msg.createdAt)}
+                          </p>
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-text-muted">
+                      <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                      <p className="text-sm">No messages yet. Start the conversation!</p>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
 
-              {/* Quick message */}
+              {/* Message Input */}
               {ticket.status !== "Completed" && ticket.status !== "Cancelled" && (
-                <div>
-                  <p className="text-xs text-text-muted uppercase tracking-wider font-semibold mb-2">Quick Message</p>
+                <div className="border-t border-surface-border pt-4">
                   {attachments.length > 0 && (
                     <div className="flex flex-wrap gap-2 mb-3">
                       {attachments.map((file, idx) => (
@@ -382,18 +426,19 @@ export default function DesignerRequestsPage() {
                         }
                       }}
                     />
-                    <label htmlFor="designer-chat-upload" className="flex items-center justify-center px-3 rounded-xl bg-surface border border-surface-border hover:border-brand-500/50 cursor-pointer transition-colors text-text-muted hover:text-white shrink-0">
+                    <label htmlFor="designer-chat-upload" className="flex items-center justify-center w-10 h-10 rounded-xl bg-surface border border-surface-border hover:border-brand-500/50 cursor-pointer transition-colors text-text-muted hover:text-white shrink-0">
                       <Paperclip className="w-4 h-4" />
                     </label>
                     <input
+                      type="text"
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
-                      placeholder={`Message ${ticket.homeownerId.profile.firstName}…`}
-                      className="flex-1 px-3.5 py-2.5 rounded-xl bg-surface border border-surface-border text-sm text-purple-100 placeholder-text-muted focus:outline-none focus:border-brand-500 transition-all"
                       onKeyPress={(e) => e.key === "Enter" && sendMessage()}
+                      placeholder={`Message ${ticket.homeownerId.profile.firstName}…`}
+                      className="flex-1 px-4 py-2 rounded-xl bg-surface border border-surface-border text-sm text-purple-100 placeholder-text-muted focus:outline-none focus:border-brand-500"
                     />
                     <Button size="sm" onClick={sendMessage} disabled={!message.trim() && attachments.length === 0}>
-                      <Send className="w-3.5 h-3.5" />
+                      <Send className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
