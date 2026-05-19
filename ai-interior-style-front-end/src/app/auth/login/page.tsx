@@ -48,7 +48,7 @@ export default function LoginPage() {
         <div className="orb orb-brand w-96 h-96 -top-24 -left-24 opacity-60 absolute" />
         <div className="orb orb-violet w-72 h-72 bottom-0 right-0 opacity-40 absolute" />
         <div className="relative text-center">
-          <h1 className="font-display text-5xl font-bold text-white mb-4">Homitify<span className="gradient-text">.</span></h1>
+          <h1 className="font-display text-5xl font-bold text-white mb-4">Homify<span className="gradient-text">.</span></h1>
           <p className="text-text-muted text-lg leading-relaxed max-w-sm">
             AI-powered interior design that transforms your space from ordinary to extraordinary.
           </p>
@@ -70,7 +70,7 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <span className="font-display font-bold text-white text-xl">Homitify<span className="gradient-text">.</span></span>
+            <span className="font-display font-bold text-white text-xl">Homify<span className="gradient-text">.</span></span>
           </div>
 
           <h2 className="font-display text-3xl font-bold text-white mb-1">Welcome back</h2>

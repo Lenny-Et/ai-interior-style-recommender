@@ -26,7 +26,7 @@ export default function Navbar() {
 
       <Link href="/" className="flex items-center gap-2 mr-4">
         <span className="font-display font-bold text-white text-lg hidden sm:block">
-          Homitify<span className="gradient-text">.</span>
+          Homify<span className="gradient-text">.</span>
         </span>
       </Link>
 

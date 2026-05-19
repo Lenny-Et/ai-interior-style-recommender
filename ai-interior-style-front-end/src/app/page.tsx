@@ -71,7 +71,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-display font-bold text-text-heading text-xl">
-              Homitify<span className="gradient-text">.</span>
+              Homify<span className="gradient-text">.</span>
             </span>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-text-muted">
@@ -317,14 +317,14 @@ export default function LandingPage() {
       {/* ─── Footer ─────────────────────────────────────────────────────────── */}
       <footer className="border-t border-surface-border py-10 px-4 text-center text-sm text-text-muted">
         <div className="flex items-center justify-center gap-2 mb-4">
-          <span className="font-display font-bold text-white">Homitify</span>
+          <span className="font-display font-bold text-white">Homify</span>
         </div>
         <div className="flex flex-wrap justify-center gap-5 mb-4">
           <Link href="/auth/login" className="hover:text-white transition-colors">Sign In</Link>
           <Link href="/auth/register" className="hover:text-white transition-colors">Get Started</Link>
           <Link href="/dashboard/designers" className="hover:text-white transition-colors">Find Designers</Link>
         </div>
-        <p>© {new Date().getFullYear()} Homitify. All rights reserved.</p>
+        <p>© {new Date().getFullYear()} Homify. All rights reserved.</p>
       </footer>
 
       {/* ─── Watch Demo Modal ─────────────────────────────────────────────── */}
@@ -353,7 +353,7 @@ export default function LandingPage() {
               <iframe
                 className="w-full h-full"
                 src="https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1" // Placeholder video, you can replace with a real demo
-                title="Homitify Demo"
+                title="Homify Demo"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
               />
