@@ -76,7 +76,7 @@ export default function Navbar() {
         {/* User avatar */}
         <Link href="/dashboard" className="ml-1 flex items-center gap-2">
           {user?.isPro && <Badge variant="green">PRO</Badge>}
-          <Avatar src={user?.avatarUrl} name={user?.name} size="sm" verified={user?.verified} />
+          <Avatar src={user?.avatarUrl} name={user?.name} size="sm" verified={user?.is_verified} />
         </Link>
       </div>
     </header>

@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Sparkles, Images, Heart, Users, MessageSquare,
   ShoppingBag, CreditCard, Settings, BarChart2, Shield, UserCheck,
-  DollarSign, Ticket, PanelLeft, LogOut, Briefcase, Bell, Star,
+  DollarSign, Ticket, PanelLeft, LogOut, Briefcase, Bell, Star, Compass,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -15,6 +15,7 @@ const navByRole = {
     { label: "AI Recommender", href: "/dashboard/ai", icon: Sparkles },
     { label: "My Designs", href: "/dashboard/my-designs", icon: Star },
     { label: "Discover Feed", href: "/dashboard/feed", icon: Images },
+    { label: "Community", href: "/dashboard/community", icon: Compass },
     { label: "Style Boards", href: "/dashboard/boards", icon: Heart },
     { label: "Designer Search", href: "/dashboard/designers", icon: Users },
     { label: "Custom Requests", href: "/dashboard/requests", icon: ShoppingBag },
