@@ -9,6 +9,7 @@ import multer from 'multer';
 import { authenticateToken } from '../middleware/auth.js';
 import { PortfolioItem } from '../models/PortfolioItem.js';
 import { User } from '../models/User.js';
+import { Board } from '../models/Board.js';
 import { sendNotification } from '../services/notificationService.js';
 
 const router = express.Router();
@@ -93,7 +94,8 @@ router.post('/recommend', authenticateToken, async (req, res) => {
       roomType = 'Living Room',
       styles = [],
       budget = '$1,000-$2,500',
-      creativity = 0.7
+      creativity = 0.7,
+      usePersonalization = false
     } = req.body;
 
     if (!imageUrl) {
@@ -112,6 +114,13 @@ router.post('/recommend', authenticateToken, async (req, res) => {
     // Search for similar designs in our database
     const similarDesigns = await searchSimilarDesigns(features, styles, roomType);
 
+    // Fetch user's styleboard context if personalization is enabled
+    let historicalContext = null;
+    if (usePersonalization === true) {
+      historicalContext = await getUserBoardContext(userId);
+      console.log(`Personalization enabled. Historical context: ${historicalContext || 'None found'}`);
+    }
+
     // Generate recommendations using Gemini API
     const recommendations = await generateDesignRecommendationsWithGemini(
       features,
@@ -124,7 +133,8 @@ router.post('/recommend', authenticateToken, async (req, res) => {
       geminiApiKey,
       useGeminiFlag,
       hfInferenceApiBaseUrl,
-      hfAccessToken
+      hfAccessToken,
+      historicalContext // Pass the historical context to the prompt
     );
 
     // Save recommendations to user profile
@@ -374,8 +384,9 @@ router.post('/analyze-style', authenticateToken, async (req, res) => {
 
 // ===== HELPER FUNCTIONS =====
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
-const HF_MODEL_ID = 'runwayml/stable-diffusion-v1-5'; // Or another appropriate model
+const GEMINI_MODEL = 'gemini-2.5-flash';
+// black-forest-labs/FLUX.1-schnell: the modern, state-of-the-art fast text-to-image model supported on HF Serverless API.
+const HF_MODEL_ID = 'black-forest-labs/FLUX.1-schnell';
 
 // Helper to get image as base64
 async function getImageBase64(imageUrl) {
@@ -411,15 +422,8 @@ async function getImageBase64(imageUrl) {
   }
 }
 
-// Generate image using Hugging Face Inference API
-async function generateImageWithHuggingFace(prompt, imageData, hfInferenceApiBaseUrl, hfAccessToken) {
-  // Ensure base URL has a trailing slash and model ID does not have a leading slash
-  const baseUrl = hfInferenceApiBaseUrl.endsWith('/') ? hfInferenceApiBaseUrl : `${hfInferenceApiBaseUrl}/`;
-  const modelId = HF_MODEL_ID.startsWith('/') ? HF_MODEL_ID.substring(1) : HF_MODEL_ID;
-  const hfApiUrl = `${baseUrl}${modelId}`;
-
-  console.log(`DEBUG HF: hfInferenceApiBaseUrl=${hfInferenceApiBaseUrl}, HF_MODEL_ID=${HF_MODEL_ID}, constructed hfApiUrl=${hfApiUrl}`);
-  
+async function generateImageWithHuggingFace(prompt, hfInferenceApiBaseUrl, hfAccessToken) {
+  // HF_INFERENCE_API_BASE_URL is optional — if not set, skip silently.
   if (typeof hfInferenceApiBaseUrl !== 'string' || hfInferenceApiBaseUrl.length === 0 ||
       typeof HF_MODEL_ID !== 'string' || HF_MODEL_ID.length === 0 ||
       typeof hfAccessToken !== 'string' || hfAccessToken.length === 0) {
@@ -427,46 +431,40 @@ async function generateImageWithHuggingFace(prompt, imageData, hfInferenceApiBas
     return null;
   }
 
-  // Validate imageData before processing
-  if (!imageData || typeof imageData !== 'string' || !imageData.includes(',')) {
-    console.warn('Invalid image data provided. Skipping image generation.');
-    return null;
+  // The serverless inference API path requires '/models/' (e.g. router.huggingface.co/hf-inference/models/{modelId})
+  let baseUrl = hfInferenceApiBaseUrl.endsWith('/') ? hfInferenceApiBaseUrl : `${hfInferenceApiBaseUrl}/`;
+  if (!baseUrl.includes('/models/')) {
+    baseUrl = `${baseUrl}models/`;
   }
+  const modelId = HF_MODEL_ID.startsWith('/') ? HF_MODEL_ID.substring(1) : HF_MODEL_ID;
+  const hfApiUrl = `${baseUrl}${modelId}`;
+  console.log(`HF txt2img: calling ${hfApiUrl}`);
 
   try {
-    // Convert base64 image data to a Buffer
-    const imageBuffer = Buffer.from(imageData.split(',')[1], 'base64');
-
-
-
     const response = await axios.post(
       hfApiUrl,
-      {
-        inputs: imageData, // Send base64 image data as string
-        parameters: {
-          prompt: prompt,
-          // Add other parameters as needed, e.g., negative_prompt, guidance_scale
-        }
-      },
+      // Text-to-image format: 'inputs' is the text prompt string, NOT base64 image data
+      { inputs: prompt },
       {
         headers: {
           Authorization: `Bearer ${hfAccessToken}`,
-          'Content-Type': 'application/json', // Set Content-Type to application/json
-          'X-Wait-For-Model': 'true', // Wait for model to load if not active
-          'X-Use-Cache': 'false', // Bypass cache for fresh generation
+          'Content-Type': 'application/json',
+          Accept: 'image/png',          // REQUIRED for text-to-image models on the new router!
+          'X-Wait-For-Model': 'true',  // Wait for model to load if cold
+          'X-Use-Cache': 'false',       // Always generate fresh
         },
-        responseType: 'arraybuffer', // Expecting binary data (image)
+        responseType: 'arraybuffer',
+        timeout: 60000, // 60s — cold starts on free tier can be slow
       }
     );
-    console.log('Hugging Face generateImageWithHuggingFace response status:', response.status);
-    console.log('Hugging Face generateImageWithHuggingFace response headers:', response.headers);
-
-    // Convert the image buffer to a base64 string
+    console.log('HF txt2img response status:', response.status);
     const generatedImageBase64 = Buffer.from(response.data, 'binary').toString('base64');
-    return `data:image/jpeg;base64,${generatedImageBase64}`;
-
+    return `data:image/png;base64,${generatedImageBase64}`;
   } catch (error) {
-    console.error('Error generating image with Hugging Face:', error.response?.data ? error.response.data.toString() : error.message);
+    const errMsg = error.response?.data
+      ? Buffer.from(error.response.data).toString().substring(0, 200)
+      : error.message;
+    console.error('HF txt2img error:', errMsg);
     throw new Error('Failed to generate image with Hugging Face');
   }
 }
@@ -616,10 +614,17 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget, gemini
         break; // Success, exit retry loop
       } catch (error) {
         const status = error.response?.status;
-        // 429 = rate limit: retrying seconds later never helps with per-minute quotas.
-        // Fail fast and use the fallback so the user gets a response quickly.
-        if (status === 429) {
-          console.warn('Gemini rate limit hit during image analysis — falling back immediately (no retry)');
+        // Always log the full Google error body for diagnostics
+        if (error.response?.data) {
+          console.error('Gemini image analysis API error body:', JSON.stringify(error.response.data, null, 2));
+        }
+        // 429 = rate limit, 403 = forbidden/billing not enabled.
+        // Both are unrecoverable per-request — fail fast and use the fallback.
+        if (status === 429 || status === 403) {
+          const reason = status === 403
+            ? 'Gemini 403 Forbidden (model may require billing) during image analysis — falling back immediately'
+            : 'Gemini rate limit hit during image analysis — falling back immediately (no retry)';
+          console.warn(reason);
           return {
             actualRoomType: roomType,
             requestedRoomType: roomType,
@@ -633,8 +638,10 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget, gemini
             architecturalFeatures: [],
             lighting: [],
             currentMood: 'contemporary',
-            keyObservations: ['Rate limit — using curated fallback'],
-            recommendationNotes: 'Rate limit reached — using curated design templates',
+            keyObservations: [status === 403 ? 'Forbidden — using curated fallback' : 'Rate limit — using curated fallback'],
+            recommendationNotes: status === 403
+              ? 'Gemini access forbidden — using curated design templates'
+              : 'Rate limit reached — using curated design templates',
             style: styles[0] || 'Modern',
             keyFeatures: ['minimalist', 'clean lines'],
             mood: 'contemporary',
@@ -753,12 +760,52 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget, gemini
   }
 }
 
-async function generateDesignRecommendationsWithGemini(features, styles, roomType, budget, creativity, similarDesigns, originalImageUrl, geminiApiKey, useGeminiFlag, hfInferenceApiBaseUrl, hfAccessToken) {
+async function getUserBoardContext(userId) {
+  try {
+    const boards = await Board.find({ userId });
+    if (!boards || boards.length === 0) return null;
+    
+    const allStyles = [];
+    boards.forEach(board => {
+      if (board.items && board.items.length > 0) {
+        board.items.forEach(item => {
+          if (item.style && typeof item.style === 'string') {
+            allStyles.push(item.style);
+          }
+        });
+      }
+    });
+    
+    if (allStyles.length === 0) return null;
+    
+    const styleCounts = {};
+    allStyles.forEach(s => {
+      const styleName = s.trim();
+      if (styleName) {
+        styleCounts[styleName] = (styleCounts[styleName] || 0) + 1;
+      }
+    });
+    
+    const sortedStyles = Object.entries(styleCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(entry => entry[0]);
+      
+    if (sortedStyles.length === 0) return null;
+    
+    return `User's historical Styleboard shows a strong preference for these styles: ${sortedStyles.join(', ')}.`;
+  } catch (err) {
+    console.error('Error fetching user board context:', err);
+    return null;
+  }
+}
+
+async function generateDesignRecommendationsWithGemini(features, styles, roomType, budget, creativity, similarDesigns, originalImageUrl, geminiApiKey, useGeminiFlag, hfInferenceApiBaseUrl, hfAccessToken, historicalContext = null) {
   try {
     const key = geminiApiKey;
     const useGemini = useGeminiFlag && typeof key === 'string' && key.length > 0;
-    const GEMINI_API_BASE_URL = process.env.GEMINI_API_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/models';
-    const GEMINI_ENDPOINT = `${GEMINI_API_BASE_URL}/${GEMINI_MODEL}:generateContent`;
+    const GEMINI_API_BASE_URL = process.env.GEMINI_API_BASE_URL || 'https://generativelanguage.googleapis.com';
+    const GEMINI_ENDPOINT = `${GEMINI_API_BASE_URL}/v1beta/models/${GEMINI_MODEL}:generateContent`;
     if (!useGemini) {
       console.warn('Gemini disabled or key missing — returning mock recommendations (set USE_GEMINI=true to enable)');
       return generateMockRecommendations(styles, roomType, budget);
@@ -785,7 +832,7 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
     - Preferred styles: ${styles.join(', ')}
     - Room type: ${roomType}
     - Budget: ${budget}
-    - Creativity level: ${creativity}
+    - Creativity level: ${creativity}${historicalContext ? `\n    - Historical Context (Personalization): ${historicalContext}\n    CRITICAL INSTRUCTION FOR PERSONALIZATION: Draw subtle inspiration from the user's Historical Context if possible to deeply personalize the design, but ALWAYS ensure the final output satisfies their explicitly requested 'Preferred styles' and 'Room type' above.` : ''}
     
     CRITICAL: Generate ONLY interior design recommendations for ${roomType}. Do not generate any other content like cars, waterfalls, landscapes, etc.
     
@@ -833,23 +880,28 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
         break; // Success, exit retry loop
       } catch (error) {
         const status = error.response?.status;
-        // 429 = rate limit: fail fast, no retry
-        if (status === 429) {
-          console.warn('Gemini rate limit hit during recommendations — falling back immediately (no retry)');
-          return generateMockRecommendations(styles, roomType, budget);
+        if (error.response?.data) {
+          console.error('Gemini recommendations API error body:', JSON.stringify(error.response.data, null, 2));
+        }
+        if (status === 429 || status === 403) {
+          const reason = status === 403
+            ? 'Gemini 403 Forbidden (model may require billing) during recommendations — falling back immediately'
+            : 'Gemini rate limit hit during recommendations — falling back immediately (no retry)';
+          console.warn(reason);
+          return generateCuratedDesignTemplates(styles, roomType, budget);
         } else if (status >= 500) {
           // Transient server error: retry with backoff
           retryCount++;
           if (retryCount >= maxRetries) {
             console.error(`Gemini server error (Status: ${status}) exceeded max retries during recommendations, using fallback`);
-            return generateMockRecommendations(styles, roomType, budget);
+            return generateCuratedDesignTemplates(styles, roomType, budget);
           }
           const fixedDelays = [3000, 8000, 15000]; // 3s, 8s, 15s
           const delay = fixedDelays[retryCount - 1] || 15000;
           console.log(`Gemini server error (Status: ${status}) during recommendations, retry ${retryCount}/${maxRetries} after ${delay}ms`);
           await new Promise(resolve => setTimeout(resolve, delay));
         } else {
-          throw error; // Re-throw non-rate-limit/non-server errors
+          throw error; // Re-throw unexpected errors
         }
       }
     }
@@ -871,20 +923,17 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
       return generateMockRecommendations(styles, roomType, budget);
     }
 
-    // Generate images for each recommendation using Hugging Face
     const recommendationsWithImages = await Promise.all(recommendations.map(async (rec) => {
-      const imagePrompt = `Interior design of a ${rec.roomType || roomType} in ${rec.style || styles[0]} style. ${rec.description}.`;
+      const imagePrompt = `Professional interior design photo of a ${rec.roomType || roomType} in ${rec.style || styles[0]} style. ${rec.description}. High quality, photorealistic, well-lit.`;
       let generatedImageUrl = null;
-      if (originalImageBase64) {
-        try {
-          generatedImageUrl = await generateImageWithHuggingFace(imagePrompt, originalImageBase64, hfInferenceApiBaseUrl, hfAccessToken);
-        } catch (hfError) {
-          console.error('Hugging Face image generation failed, falling back to mock image:', hfError);
-        }
+      try {
+        generatedImageUrl = await generateImageWithHuggingFace(imagePrompt, hfInferenceApiBaseUrl, hfAccessToken);
+      } catch (hfError) {
+        console.error('HF image generation failed, using curated fallback:', hfError.message);
       }
       return {
         ...rec,
-        imageUrl: (generatedImageUrl || 'https://via.placeholder.com/800x600?text=Image+Generation+Failed').replace(/`/g, '').trim() // Fallback image, remove backticks and trim whitespace
+        imageUrl: (generatedImageUrl || getInteriorImage(rec.roomType || roomType, rec.style || styles[0])).replace(/`/g, '').trim()
       };
     }));
 
@@ -1339,7 +1388,15 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
   // Return templates for the requested room type, or default to Living Room
   const roomTemplates = templates[roomType] || templates['Living Room'];
 
+  // Parse the user's max budget from strings like '$1,000–$2,500' or '$1,000-$2,500'
+  const budgetMax = (() => {
+    if (!budget) return Infinity;
+    const nums = budget.replace(/[^0-9,\-–]/g, '').split(/[-–]/).map(n => parseInt(n.replace(/,/g, ''), 10)).filter(Boolean);
+    return nums.length >= 2 ? nums[1] : (nums[0] || Infinity);
+  })();
+
   // Filter by user's preferred styles if specified
+  let candidates = roomTemplates;
   if (styles && styles.length > 0) {
     const filtered = roomTemplates.filter(template =>
       styles.some(style =>
@@ -1347,11 +1404,18 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
       )
     );
     if (filtered.length >= 1) {
-      return filtered.slice(0, 4);
+      candidates = filtered;
     }
   }
 
-  return roomTemplates.slice(0, 4);
+  // Further filter by budget — prefer templates whose price is within range
+  const withinBudget = candidates.filter(template => {
+    const priceNum = parseInt((template.price || '0').replace(/[^0-9]/g, ''), 10);
+    return priceNum <= budgetMax;
+  });
+
+  // Return budget-appropriate templates (fall back to all candidates if none match)
+  return (withinBudget.length >= 1 ? withinBudget : candidates).slice(0, 4);
 }
 
 function generateMockRecommendations(styles, roomType, budget) {
