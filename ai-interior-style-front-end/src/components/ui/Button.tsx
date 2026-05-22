@@ -17,9 +17,9 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variants = {
       brand:       "bg-gradient-to-r from-brand-600 to-brand-500 text-white hover:from-brand-500 hover:to-brand-400 hover:shadow-glow active:scale-[0.98]",
-      ghost:       "bg-transparent border border-surface-border text-purple-300 hover:border-brand-500 hover:text-brand-400 hover:bg-surface-hover",
-      outline:     "bg-transparent border border-brand-500/50 text-brand-400 hover:bg-brand-600/10 hover:border-brand-400",
-      destructive: "bg-red-600/20 border border-red-500/40 text-red-400 hover:bg-red-600/30 hover:border-red-400",
+      ghost:       "bg-transparent border border-surface-border text-text-muted hover:border-brand-500 hover:text-brand-600 hover:bg-surface-hover",
+      outline:     "bg-transparent border border-brand-500/50 text-brand-600 hover:bg-brand-600/10 hover:border-brand-500",
+      destructive: "bg-red-600/20 border border-red-500/40 text-red-500 hover:bg-red-600/30 hover:border-red-400",
       gold:        "bg-gradient-to-r from-gold-600 to-gold-500 text-white hover:from-gold-500 hover:to-gold-400 hover:shadow-glow-gold",
     };
 

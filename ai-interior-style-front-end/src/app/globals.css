@@ -231,3 +231,26 @@ html.light .text-white { color: var(--text-heading); }
 html.light .text-purple-100 { color: var(--text); }
 html.light .text-purple-300 { color: var(--text-muted); }
 html.light .bg-black\/50 { background-color: rgba(0,0,0,0.3); }
+
+/* ─── Light mode button overrides ──────────────────────────────────────── */
+html.light .btn-brand,
+html.light button.bg-gradient-to-r { color: #ffffff; }
+
+/* Sidebar active item — solid purple in light mode */
+html.light aside a.bg-brand-600\/20 {
+  background-color: #c026d3;
+  color: #ffffff;
+  border-color: #a21caf;
+}
+html.light aside a.bg-brand-600\/20 svg {
+  color: #ffffff;
+}
+html.light aside a.bg-brand-600\/20 span.bg-brand-400 {
+  background-color: #ffffff;
+}
+
+html.light .badge-gray { @apply bg-brand-100 text-brand-700 border-brand-200; }
+html.light .badge-brand { @apply bg-brand-100 text-brand-700 border-brand-300; }
+html.light .badge-gold  { @apply bg-amber-100 text-amber-700 border-amber-300; }
+html.light .badge-green { @apply bg-emerald-100 text-emerald-700 border-emerald-300; }
+html.light .badge-red   { @apply bg-red-100 text-red-700 border-red-300; }

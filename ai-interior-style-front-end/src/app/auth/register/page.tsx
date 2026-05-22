@@ -54,7 +54,7 @@ export default function RegisterPage() {
         }
       });
       
-      toast.success("Account created! Welcome to Homitify.");
+      toast.success("Account created! Welcome to Homify.");
       router.push(role === "designer" ? "/designer" : "/dashboard");
     } catch (error: any) {
       toast.error(error.error || error.message || "Registration failed. Please try again.");
@@ -91,7 +91,7 @@ export default function RegisterPage() {
           {step === 1 ? (
             <div>
               <h2 className="font-semibold text-white mb-1">I am a…</h2>
-              <p className="text-sm text-text-muted mb-5">Choose how you'll use Homitify</p>
+              <p className="text-sm text-text-muted mb-5">Choose how you'll use Homify</p>
               <div className="grid grid-cols-2 gap-3 mb-6">
                 {ROLES.map(({ value, label, icon: Icon, desc }) => (
                   <button

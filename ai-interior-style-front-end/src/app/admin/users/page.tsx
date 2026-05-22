@@ -488,7 +488,7 @@ function GuidelinesModal({ show, onClose }: { show: boolean, onClose: () => void
                     <p className="text-[10px] text-text-muted">Email verified & Basic profile complete.</p>
                   </div>
                   <div className="p-3 rounded-xl bg-brand-600/10 border border-brand-500/30">
-                    <p className="text-xs font-bold text-brand-400 mb-1">Homitify Verified</p>
+                    <p className="text-xs font-bold text-brand-400 mb-1">Homify Verified</p>
                     <p className="text-[10px] text-brand-400/80">Portfolio reviewed by Admin. Eligible for featured list.</p>
                   </div>
                 </div>

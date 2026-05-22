@@ -68,7 +68,7 @@ export default function Sidebar() {
                 "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
                 active
                   ? "bg-brand-600/20 text-brand-300 border border-brand-500/30"
-                  : "text-text-muted hover:bg-surface-hover hover:text-purple-200"
+                  : "text-text-muted hover:bg-surface-hover hover:text-brand-600"
               )}
             >
               <Icon className={cn("w-4 h-4 shrink-0", active ? "text-brand-400" : "text-text-muted")} />

@@ -295,7 +295,7 @@ export const useAppStore = create<AppState>()(
       },
     }),
     {
-      name: 'homitify-store',
+      name: 'homify-store',
       partialize: (state) => ({
         theme: state.theme,
         sidebarOpen: state.sidebarOpen,
