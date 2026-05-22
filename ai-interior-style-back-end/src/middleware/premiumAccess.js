@@ -1,4 +1,5 @@
 import { PremiumPurchase } from '../models/PremiumPurchase.js';
+import { User } from '../models/User.js';
 
 // Middleware to check if user has premium access for chat functionality
 export const requirePremiumAccess = async (req, res, next) => {
@@ -11,14 +12,8 @@ export const requirePremiumAccess = async (req, res, next) => {
       return next();
     }
 
-    // Check if user has any active premium purchase
-    const hasPremiumAccess = await PremiumPurchase.findOne({
-      userId,
-      status: 'completed',
-      expiresAt: { $gt: new Date() }
-    });
-
-    if (!hasPremiumAccess) {
+    const user = await User.findById(userId);
+    if (!user || !user.isPro) {
       return res.status(403).json({
         error: 'Premium access required',
         message: 'Chat with designers requires a premium subscription',
