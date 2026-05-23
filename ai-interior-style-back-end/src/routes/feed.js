@@ -199,6 +199,8 @@ router.get('/', authenticateToken, async (req, res) => {
 
     // Get like data for all portfolio items
     const { Like } = await import('../models/Like.js');
+    const { Comment } = await import('../models/Comment.js');
+    const { Save } = await import('../models/Save.js');
     const portfolioItemIds = portfolioItems.map(item => item._id);
     
     // Get all likes for these portfolio items
@@ -217,6 +219,26 @@ router.get('/', authenticateToken, async (req, res) => {
         userLikes.add(like.targetId.toString());
       }
     });
+
+    // Get all comments for these portfolio items to count them
+    const comments = await Comment.find({
+      targetType: 'portfolio',
+      targetId: { $in: portfolioItemIds }
+    });
+
+    const commentCounts = {};
+    comments.forEach(comment => {
+      commentCounts[comment.targetId] = (commentCounts[comment.targetId] || 0) + 1;
+    });
+
+    // Check which items are saved by the current user
+    const saves = await Save.find({
+      userId,
+      targetType: 'portfolio',
+      targetId: { $in: portfolioItemIds }
+    });
+
+    const userSaves = new Set(saves.map(s => s.targetId.toString()));
 
     // Transform to match frontend expected format
     const feed = portfolioItems.map(item => {
@@ -261,9 +283,9 @@ router.get('/', authenticateToken, async (req, res) => {
           }
         },
         likeCount: likeCounts[itemId] || 0,
-        commentCount: 0, // TODO: Implement comments later
+        commentCount: commentCounts[itemId] || 0,
         isLiked: userLikes.has(itemId),
-        isSaved: false, // TODO: Implement saves later
+        isSaved: userSaves.has(itemId),
         createdAt: item.createdAt
       };
     });
