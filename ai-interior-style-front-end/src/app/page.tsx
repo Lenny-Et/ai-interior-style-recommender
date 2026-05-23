@@ -13,7 +13,7 @@ import { useAppStore } from "@/lib/store";
 
 const BEFORE_AFTER = [
   {
-    before: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&h=400&fit=crop",
+    before: "https://images.unsplash.com/photo-1484101403633-562f891dc89a?w=600&h=400&fit=crop",
     after:  "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?w=600&h=400&fit=crop",
     label:  "Living Room Transformation",
     style:  "Modern Minimalist",
