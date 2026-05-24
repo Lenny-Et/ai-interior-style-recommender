@@ -67,10 +67,17 @@ router.post('/forgot-password', asyncHandler(async (req, res) => {
 
   // Generate password reset token
   const resetToken = await generatePasswordResetToken(user._id);
-  
-  // Send password reset email
-  await sendPasswordResetEmail(email, resetToken);
-  
+
+  // Send password reset email — wrapped so an email failure doesn't crash the request
+  try {
+    await sendPasswordResetEmail(email, resetToken);
+    console.log(`Password reset email sent to ${email}`);
+  } catch (emailErr) {
+    // Log the error but still return success — the token is saved and can be resent
+    console.error('Failed to send password reset email:', emailErr.message || emailErr);
+    console.log(`[DEV] Reset link: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/reset-password?token=${resetToken}`);
+  }
+
   res.json({ message: 'If an account exists with this email, a password reset link has been sent.' });
 }));
 

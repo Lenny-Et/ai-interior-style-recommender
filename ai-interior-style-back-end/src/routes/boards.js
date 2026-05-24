@@ -2,6 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import { Board } from '../models/Board.js';
 import { Save } from '../models/Save.js';
+import { PortfolioItem } from '../models/PortfolioItem.js';
 import { InspirationPost } from '../models/InspirationPost.js';
 import { authenticateToken } from '../middleware/auth.js';
 
@@ -27,7 +28,13 @@ router.get('/', authenticateToken, async (req, res) => {
 
     // Optimization: Get save counts for all boards in one query
     const boardSaveCounts = await Save.aggregate([
-      { $match: { userId: new mongoose.Types.ObjectId(userId), boardId: { $exists: true } } },
+      { 
+        $match: { 
+          userId: new mongoose.Types.ObjectId(userId), 
+          boardId: { $exists: true },
+          targetType: { $in: ['portfolio', 'design'] }
+        } 
+      },
       { $group: { _id: '$boardId', count: { $sum: 1 } } }
     ]);
 
@@ -46,10 +53,11 @@ router.get('/', authenticateToken, async (req, res) => {
       const portfolioSaves = await Save.find({
         userId,
         boardId: board._id,
-        targetType: 'portfolio'
+        targetType: { $in: ['portfolio', 'design'] }
       })
       .populate({
         path: 'targetId',
+        model: 'PortfolioItem',
         select: 'imageUrl metadata style roomType'
       })
       .limit(3)
@@ -164,12 +172,7 @@ router.delete('/:boardId', authenticateToken, async (req, res) => {
     }
 
     // Remove all saves associated with this board
-    await Save.deleteMany({
-      $or: [
-        { targetType: 'board', targetId: boardId },
-        { userId: userId, targetType: 'portfolio' } // Remove portfolio saves from this user's boards
-      ]
-    });
+    await Save.deleteMany({ boardId });
 
     await Board.findByIdAndDelete(boardId);
 
@@ -196,18 +199,27 @@ router.post('/:boardId/items', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Board not found' });
     }
 
-    // Check if already saved to this specific board
-    const existingSave = await Save.findOne({ userId, boardId, targetType, targetId });
+    // Normalize targetType ('design' is actually saved as 'portfolio' in DB)
+    const normalizedTargetType = targetType === 'design' ? 'portfolio' : targetType;
+
+    // Check if already saved in this board
+    const existingSave = await Save.findOne({
+      userId,
+      targetType: normalizedTargetType,
+      targetId,
+      boardId
+    });
+
     if (existingSave) {
-      return res.status(400).json({ error: 'Item already saved to this board' });
+      return res.status(400).json({ error: 'Item already saved in this board' });
     }
 
     // Create a save record linking the item to the board
     const save = new Save({
       userId,
-      boardId,
-      targetType,
-      targetId
+      targetType: normalizedTargetType,
+      targetId,
+      boardId
     });
 
     await save.save();
@@ -316,12 +328,13 @@ router.get('/:boardId/items', authenticateToken, async (req, res) => {
     const skip = (pageNum - 1) * limitNum;
 
     const saves = await Save.find({
-      userId,
       boardId,
-      targetType: 'portfolio'
+      userId,
+      targetType: { $in: ['portfolio', 'design'] }
     })
     .populate({
       path: 'targetId',
+      model: 'PortfolioItem',
       select: 'imageUrl description metadata designerId createdAt'
     })
     .sort({ createdAt: -1 })

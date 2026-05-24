@@ -62,6 +62,8 @@ export default function StyleBoardsPage() {
   const [editingBoard, setEditingBoard] = useState<Board | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [selectedBoard, setSelectedBoard] = useState<Board | null>(null);
+  const [boardItems, setBoardItems] = useState<any[]>([]);
+  const [loadingBoardItems, setLoadingBoardItems] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterTag, setFilterTag] = useState<string | null>(null);
   const [showAddItems, setShowAddItems] = useState(false);
@@ -138,9 +140,20 @@ export default function StyleBoardsPage() {
     setShowEdit(true);
   };
 
-  const showBoardDetails = (board: Board) => {
+  const showBoardDetails = async (board: Board) => {
     setSelectedBoard(board);
     setShowDetails(true);
+    setBoardItems([]);
+    setLoadingBoardItems(true);
+    try {
+      const response = await apiClient.getBoardItems(board._id, 1, 50);
+      const itemsData = (response as any).data || response;
+      setBoardItems(itemsData.items || []);
+    } catch (error: any) {
+      toast.error(error.error || error.message || "Failed to load board items");
+    } finally {
+      setLoadingBoardItems(false);
+    }
   };
 
   const shareBoard = async (board: Board) => {
@@ -776,13 +789,18 @@ export default function StyleBoardsPage() {
               {/* Board Items Grid */}
               <div>
                 <h4 className="text-sm font-semibold text-white mb-3">Saved Items</h4>
-                {selectedBoard.sampleItems && selectedBoard.sampleItems.length > 0 ? (
+                {loadingBoardItems ? (
+                  <div className="text-center py-8 text-text-muted">
+                    <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                    <p className="text-xs">Loading items...</p>
+                  </div>
+                ) : boardItems && boardItems.length > 0 ? (
                   <div className="grid grid-cols-3 gap-3">
-                    {selectedBoard.sampleItems.map((item, index) => (
+                    {boardItems.map((item, index) => (
                       <div key={index} className="relative group rounded-lg overflow-hidden border border-surface-border">
                         <Image src={item.imageUrl} alt="" width={200} height={200} className="w-full h-32 object-cover" />
                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <p className="text-xs text-white text-center px-2">{item.metadata.style} • {item.metadata.roomType}</p>
+                          <p className="text-xs text-white text-center px-2">{item.metadata?.style || 'Modern'} • {item.metadata?.roomType || 'Living Room'}</p>
                         </div>
                       </div>
                     ))}

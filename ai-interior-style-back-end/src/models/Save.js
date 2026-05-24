@@ -20,7 +20,7 @@ const saveSchema = new mongoose.Schema({
     required: true 
   }
 }, { 
-  timestamps: true 
+  timestamps: true
 });
 
 // Compound index to prevent duplicate saves and for efficient queries

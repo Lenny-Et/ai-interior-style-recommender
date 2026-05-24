@@ -7,6 +7,7 @@ import { Report } from '../models/Report.js';
 import { User } from '../models/User.js';
 import { PortfolioItem } from '../models/PortfolioItem.js';
 import { InspirationPost } from '../models/InspirationPost.js';
+import { Comment } from '../models/Comment.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { sendNotification } from '../services/notificationService.js';
 
@@ -531,6 +532,139 @@ router.post('/report', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Report submission error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ===== COMMENT SYSTEM =====
+
+// Add a comment
+router.post('/comment/:targetType/:targetId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { targetType, targetId } = req.params;
+    const { content } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ error: 'Comment content is required' });
+    }
+
+    // Validate target type
+    if (!['portfolio', 'design'].includes(targetType)) {
+      return res.status(400).json({ error: 'Invalid target type' });
+    }
+
+    // Check if content exists
+    let item;
+    if (targetType === 'portfolio') {
+      item = await PortfolioItem.findById(targetId);
+    } else {
+      return res.status(501).json({ error: 'Design comments not yet implemented' });
+    }
+
+    if (!item) {
+      return res.status(404).json({ error: 'Content not found' });
+    }
+
+    const comment = new Comment({
+      userId,
+      targetType,
+      targetId,
+      content: content.trim()
+    });
+
+    await comment.save();
+
+    // Populate user info before returning
+    await comment.populate({
+      path: 'userId',
+      select: 'profile.firstName profile.lastName profile.profilePicture'
+    });
+
+    // Send notification to owner
+    const commenter = await User.findById(userId);
+    const commenterName = commenter?.profile 
+      ? `${commenter.profile.firstName} ${commenter.profile.lastName}`
+      : 'Someone';
+    
+    if (item.designerId && item.designerId.toString() !== userId) {
+      try {
+        await sendNotification(item.designerId, {
+          title: 'New Comment',
+          message: `${commenterName} commented on your design!`,
+          type: 'new_comment'
+        });
+      } catch (notifErr) {
+        console.error('Failed to send comment notification:', notifErr);
+      }
+    }
+
+    res.status(201).json({ message: 'Comment added successfully', comment });
+  } catch (error) {
+    console.error('Add comment error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get comments for an item
+router.get('/comments/:targetType/:targetId', async (req, res) => {
+  try {
+    const { targetType, targetId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Validate target type
+    if (!['portfolio', 'design'].includes(targetType)) {
+      return res.status(400).json({ error: 'Invalid target type' });
+    }
+
+    const comments = await Comment.find({ targetType, targetId })
+      .populate('userId', 'profile.firstName profile.lastName profile.profilePicture')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    const total = await Comment.countDocuments({ targetType, targetId });
+
+    res.json({
+      comments,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum)
+      }
+    });
+  } catch (error) {
+    console.error('Get comments error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete a comment
+router.delete('/comment/:commentId', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { commentId } = req.params;
+
+    const comment = await Comment.findById(commentId);
+    if (!comment) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+
+    // Check if the user is the author of the comment
+    if (comment.userId.toString() !== userId) {
+      return res.status(403).json({ error: 'Unauthorized to delete this comment' });
+    }
+
+    await Comment.findByIdAndDelete(commentId);
+
+    res.json({ message: 'Comment deleted successfully' });
+  } catch (error) {
+    console.error('Delete comment error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

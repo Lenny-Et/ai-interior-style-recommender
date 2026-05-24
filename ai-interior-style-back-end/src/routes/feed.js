@@ -10,7 +10,7 @@ const router = express.Router();
 // Feed generation service
 class FeedService {
   static async generateFeedForUser(userId, options = {}) {
-    const { page = 1, limit = 20, contentTypes = ['portfolio', 'design'] } = options;
+    const { page = 1, limit = 20 } = options;
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
@@ -177,14 +177,16 @@ router.get('/', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
     const { page = 1, limit = 20, followingOnly = 'false', likesOnly = 'false' } = req.query;
     
+    const { Like } = await import('../models/Like.js');
+    const { Comment } = await import('../models/Comment.js');
+    const { Save } = await import('../models/Save.js');
+
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
 
     // Build the query
     let query = { isApproved: true };
-
-    const { Like } = await import('../models/Like.js');
 
     if (followingOnly === 'true') {
       const following = await Follow.find({ followerId: userId }).select('followingId');
@@ -240,6 +242,26 @@ router.get('/', authenticateToken, async (req, res) => {
       }
     });
 
+    // Get all comments for these portfolio items to count them
+    const comments = await Comment.find({
+      targetType: 'portfolio',
+      targetId: { $in: portfolioItemIds }
+    });
+
+    const commentCounts = {};
+    comments.forEach(comment => {
+      commentCounts[comment.targetId] = (commentCounts[comment.targetId] || 0) + 1;
+    });
+
+    // Check which items are saved by the current user
+    const saves = await Save.find({
+      userId,
+      targetType: 'portfolio',
+      targetId: { $in: portfolioItemIds }
+    });
+
+    const userSaves = new Set(saves.map(s => s.targetId.toString()));
+
     // Transform to match frontend expected format
     const feed = portfolioItems.map(item => {
       const itemId = item._id.toString();
@@ -275,9 +297,9 @@ router.get('/', authenticateToken, async (req, res) => {
           isFollowing: followedDesignerIds.has(designerId)
         },
         likeCount: likeCounts[itemId] || 0,
-        commentCount: 0, 
+        commentCount: commentCounts[itemId] || 0,
         isLiked: currentUserLikes.has(itemId),
-        isSaved: false, 
+        isSaved: userSaves.has(itemId),
         createdAt: item.createdAt
       };
     });
