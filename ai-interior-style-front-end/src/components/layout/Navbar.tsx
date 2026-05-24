@@ -44,7 +44,7 @@ export default function Navbar() {
 
       {/* Right: Actions */}
       <div className="flex items-center gap-1 ml-auto">
-        {user && !user.isPro && (
+        {user && !user.isPro && user.role !== 'admin' && (
           <Link href="/dashboard/settings" className="text-sm font-medium text-brand-400 hover:text-brand-300 transition-colors px-3 py-2 rounded-lg bg-brand-600/10 border border-brand-500/30">
             Upgrade to Pro
           </Link>
@@ -76,7 +76,7 @@ export default function Navbar() {
         {/* User avatar */}
         <Link href="/dashboard" className="ml-1 flex items-center gap-2">
           {user?.isPro && <Badge variant="green">PRO</Badge>}
-          <Avatar src={user?.avatarUrl} name={user?.name} size="sm" verified={user?.verified} />
+          <Avatar src={user?.avatarUrl} name={user?.name} size="sm" verified={user?.approvalStatus === 'approved'} />
         </Link>
       </div>
     </header>

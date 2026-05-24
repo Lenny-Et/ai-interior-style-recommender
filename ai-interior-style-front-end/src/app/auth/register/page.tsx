@@ -27,7 +27,7 @@ export default function RegisterPage() {
     password: "",
     company: "",
     portfolioUrl: "",
-    cvUrl: "",
+    cvFile: null as File | null,
     workHistory: [{ title: "", description: "", startDate: "", endDate: "" }]
   });
   const router = useRouter();
@@ -36,23 +36,64 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Task 3.4 — Frontend validation: CV file is required for designers
+    if (role === 'designer' && !form.cvFile) {
+      toast.error('Please upload your CV. A PDF, DOC or DOCX file is required for designer registration.');
+      return;
+    }
+
     try {
       const [firstName, ...lastNameParts] = form.name.split(' ');
       const lastName = lastNameParts.join(' ');
-      
-      await register({
-        email: form.email,
-        password: form.password,
-        role: role,
-        profile: {
+
+      if (role === 'designer' && form.cvFile) {
+        // Task 3.4 — Send FormData so the backend multer can receive the CV file
+        const formData = new FormData();
+        formData.append('email', form.email);
+        formData.append('password', form.password);
+        formData.append('role', role);
+        formData.append('cv', form.cvFile);
+        const profileObj = {
           firstName,
           lastName: lastName || '',
-          company: role === 'designer' ? form.company : undefined,
-          portfolioUrl: role === 'designer' ? form.portfolioUrl : undefined,
-          cvUrl: role === 'designer' ? form.cvUrl : undefined,
-          workHistory: role === 'designer' ? form.workHistory : undefined,
+          company: form.company || undefined,
+          portfolioUrl: form.portfolioUrl || undefined,
+          workHistory: form.workHistory,
+        };
+        formData.append('profile', JSON.stringify(profileObj));
+
+        const { apiClient } = await import('@/lib/api-client');
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/auth/register`, {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        });
+        if (!response.ok) {
+          const data = await response.json();
+          throw { error: data.error || data.message || 'Registration failed' };
         }
-      });
+        // Manual login after successful registration
+        await register({
+          email: form.email,
+          password: form.password,
+          role,
+          profile: profileObj,
+        });
+      } else {
+        await register({
+          email: form.email,
+          password: form.password,
+          role,
+          profile: {
+            firstName,
+            lastName: lastName || '',
+            company: role === 'designer' ? form.company : undefined,
+            portfolioUrl: role === 'designer' ? form.portfolioUrl : undefined,
+            workHistory: role === 'designer' ? form.workHistory : undefined,
+          }
+        });
+      }
       
       toast.success("Account created! Welcome to Homify.");
       router.push(role === "designer" ? "/designer" : "/dashboard");
@@ -123,7 +164,32 @@ export default function RegisterPage() {
                 <>
                   <Input id="reg-company" label="Company (Optional)" type="text" placeholder="Design Studio Inc." icon={Briefcase} value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />
                   <Input id="reg-portfolio" label="Portfolio URL (Optional)" type="url" placeholder="https://myportfolio.com" icon={Briefcase} value={form.portfolioUrl} onChange={(e) => setForm({ ...form, portfolioUrl: e.target.value })} />
-                  <Input id="reg-cv" label="CV URL (Optional)" type="url" placeholder="https://mycv.com/my-cv.pdf" icon={Briefcase} value={form.cvUrl} onChange={(e) => setForm({ ...form, cvUrl: e.target.value })} />
+                  <div>
+                    <label className="block text-xs font-medium text-text-muted mb-1.5">
+                      CV / Resume <span className="text-red-400">*</span>
+                    </label>
+                    <label
+                      htmlFor="reg-cv-file"
+                      className="flex flex-col items-center gap-2 px-4 py-4 rounded-xl border-2 border-dashed border-surface-border bg-surface-card hover:border-brand-500/60 cursor-pointer transition-all group"
+                    >
+                      <Briefcase className="w-5 h-5 text-text-muted group-hover:text-brand-400 transition-colors" />
+                      <span className="text-sm text-text-muted group-hover:text-brand-300 transition-colors">
+                        {form.cvFile ? form.cvFile.name : 'Click to upload CV / Resume'}
+                      </span>
+                      <span className="text-[10px] text-text-muted">PDF, DOC or DOCX &bull; max 10 MB</span>
+                      <input
+                        id="reg-cv-file"
+                        type="file"
+                        accept=".pdf,.doc,.docx"
+                        className="hidden"
+                        onChange={(e) => setForm({ ...form, cvFile: e.target.files?.[0] ?? null })}
+                        required
+                      />
+                    </label>
+                    <p className="text-[11px] text-text-muted mt-1.5">
+                      <span className="text-red-400 font-bold">*</span> Required — upload your CV, resume, or portfolio document.
+                    </p>
+                  </div>
                   <h3 className="font-semibold text-white mt-6 mb-2">Work History (Past Experience)</h3>
                   {form.workHistory.map((item, index) => (
                     <div key={index} className="space-y-2 border p-4 rounded-lg border-surface-border">

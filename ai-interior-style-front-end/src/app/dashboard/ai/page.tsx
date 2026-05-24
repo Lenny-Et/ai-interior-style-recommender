@@ -8,7 +8,8 @@ import Card from "@/components/ui/Card";
 import {
   Sparkles, Upload, X, CheckCircle, ArrowRight,
   Heart, Share2, Download, RefreshCw, Eye, Star,
-  Clock, History, FolderHeart, Plus
+  Clock, History, FolderHeart, Plus, ZoomIn, ZoomOut, Copy, Link2,
+  LayoutGrid, ChevronLeft
 } from "lucide-react";
 import { STYLE_TAGS, ROOM_TYPES, BUDGET_RANGES, cn } from "@/lib/utils";
 import toast from "react-hot-toast";
@@ -68,6 +69,8 @@ export default function AIRecommenderPage() {
   };
 
   const [previewRec, setPreviewRec] = useState<AIRecommendation | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(1); // Task 3.1: zoom for preview modal
+  const [showHistoryGallery, setShowHistoryGallery] = useState(false); // Task 3.1: gallery modal
   
   // Board Save State
   const [saveModalOpen, setSaveModalOpen] = useState(false);
@@ -94,18 +97,36 @@ export default function AIRecommenderPage() {
 
   // Share a recommendation via Web Share API, falling back to clipboard
   const shareRecommendation = async (rec: AIRecommendation) => {
-    const text = `Check out this ${rec.style} ${rec.roomType} design: "${rec.name}" — ${rec.description}`;
-    const url = rec.imageUrl;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: rec.name, text, url });
-        toast.success("Shared successfully!");
-      } catch (_) {
-        // user cancelled — no-op
+    const shareBase = typeof window !== 'undefined' ? window.location.origin : '';
+    // Use the recommendation id to generate a public shareable link
+    const shareUrl = `${shareBase}/share/${rec.id || sessionId}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success("Share link copied to clipboard! 🔗", { duration: 3000 });
+    } catch {
+      // Clipboard failed, try Web Share API as fallback
+      if (navigator.share) {
+        try {
+          await navigator.share({ title: rec.name, text: rec.description, url: shareUrl });
+        } catch (_) { /* user cancelled */ }
+      } else {
+        toast.error("Could not copy link — please copy the URL manually.");
       }
-    } else {
-      await navigator.clipboard.writeText(`${text}\n${url}`);
-      toast.success("Link copied to clipboard!");
+    }
+  };
+
+  // Task 3.2: Copy a public sharing URL using navigator.clipboard API
+  const copyShareLink = async (sessionId: string | null, rec?: AIRecommendation) => {
+    try {
+      const shareBase = typeof window !== 'undefined' ? window.location.origin : '';
+      // Public sharing URL that can be opened without login
+      const shareUrl = sessionId
+        ? `${shareBase}/share/${sessionId}`
+        : rec?.imageUrl || shareBase;
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success("Share link copied to clipboard! 🔗", { duration: 3000 });
+    } catch {
+      toast.error("Failed to copy link — please try manually.");
     }
   };
 
@@ -374,48 +395,15 @@ export default function AIRecommenderPage() {
         </div>
 
         {savedRecommendations.length > 0 && (
-          <div className="relative">
-            <Button variant="outline" onClick={() => setShowHistory(!showHistory)}>
-              <Clock className="w-4 h-4 mr-2" /> History
+          <div className="flex gap-2">
+            {/* Task 3.1: Gallery history button */}
+            <Button
+              variant="outline"
+              onClick={() => setShowHistoryGallery(true)}
+              id="history-gallery-btn"
+            >
+              <LayoutGrid className="w-4 h-4 mr-2" /> History Gallery
             </Button>
-            {showHistory && (
-              <div className="absolute right-0 top-full mt-2 w-72 bg-surface border border-surface-border rounded-xl shadow-xl z-50 max-h-96 overflow-y-auto">
-                <div className="p-3 border-b border-surface-border flex justify-between items-center sticky top-0 bg-surface/90 backdrop-blur z-10">
-                  <h3 className="font-semibold text-white">Past Generations</h3>
-                  <button onClick={() => setShowHistory(false)}><X className="w-4 h-4 text-text-muted hover:text-white" /></button>
-                </div>
-                <div className="p-2 space-y-1">
-                  {savedRecommendations.map((session) => (
-                    <button
-                      key={session.sessionId}
-                      onClick={() => loadSessionFromHistory(session)}
-                      className={cn(
-                        "w-full text-left flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover transition-colors",
-                        currentSessionId === session.sessionId && "bg-brand-500/10 border border-brand-500/30"
-                      )}
-                    >
-                      {session.imageUrl ? (
-                        <div className="w-12 h-12 rounded object-cover flex-shrink-0 bg-surface-card overflow-hidden">
-                          <img src={session.imageUrl} alt="Session thumbnail" className="w-full h-full object-cover" />
-                        </div>
-                      ) : (
-                        <div className="w-12 h-12 rounded bg-surface-card flex items-center justify-center flex-shrink-0">
-                          <Sparkles className="w-5 h-5 text-text-muted" />
-                        </div>
-                      )}
-                      <div className="overflow-hidden">
-                        <p className="text-sm font-medium text-white truncate">
-                          {session.metadata?.roomType || 'Room'}
-                        </p>
-                        <p className="text-xs text-text-muted truncate">
-                          {new Date(session.createdAt || session.metadata?.generatedAt || new Date()).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -611,7 +599,7 @@ export default function AIRecommenderPage() {
                   <div className="flex gap-2">
                     <Button
                       variant="ghost" size="sm" className="flex-1"
-                      onClick={(e) => { e.stopPropagation(); setPreviewRec(set); }}
+                      onClick={(e) => { e.stopPropagation(); setPreviewRec(set); setZoomLevel(1); }}
                     >
                       <Eye className="w-3.5 h-3.5" /> Preview
                     </Button>
@@ -628,12 +616,13 @@ export default function AIRecommenderPage() {
                     >
                       <Download className="w-3.5 h-3.5" />
                     </Button>
+                    {/* Task 3.2: Copy Share Link button using navigator.clipboard */}
                     <Button
                       variant="ghost" size="sm"
-                      onClick={(e) => { e.stopPropagation(); shareRecommendation(set); }}
-                      title="Share this design"
+                      onClick={(e) => { e.stopPropagation(); copyShareLink(currentSessionId, set); }}
+                      title="Copy public share link"
                     >
-                      <Share2 className="w-3.5 h-3.5" />
+                      <Link2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
                 </div>
@@ -662,7 +651,7 @@ export default function AIRecommenderPage() {
         </div>
       )}
 
-      {/* ── Full-screen Preview Modal ── */}
+      {/* ── Full-screen Preview Modal with Zoom (Task 3.1) ── */}
       {previewRec && (
         <div
           className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
@@ -672,20 +661,43 @@ export default function AIRecommenderPage() {
             className="relative max-w-3xl w-full bg-surface-card rounded-2xl overflow-hidden shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Zoom controls */}
+            <div className="absolute top-4 left-4 z-10 flex gap-2">
+              <button
+                onClick={() => setZoomLevel(z => Math.max(1, z - 0.25))}
+                disabled={zoomLevel <= 1}
+                className="w-8 h-8 rounded-full bg-black/60 backdrop-blur flex items-center justify-center hover:bg-black/80 transition-colors disabled:opacity-40"
+              >
+                <ZoomOut className="w-4 h-4 text-white" />
+              </button>
+              <button
+                onClick={() => setZoomLevel(z => Math.min(3, z + 0.25))}
+                disabled={zoomLevel >= 3}
+                className="w-8 h-8 rounded-full bg-black/60 backdrop-blur flex items-center justify-center hover:bg-black/80 transition-colors disabled:opacity-40"
+              >
+                <ZoomIn className="w-4 h-4 text-white" />
+              </button>
+              <span className="px-2 rounded-full bg-black/60 backdrop-blur text-white text-xs flex items-center font-mono">
+                {Math.round(zoomLevel * 100)}%
+              </span>
+            </div>
             <button
               onClick={() => setPreviewRec(null)}
               className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-black/60 backdrop-blur flex items-center justify-center hover:bg-black/80 transition-colors"
             >
               <X className="w-4 h-4 text-white" />
             </button>
-            <div className="relative">
-              <img src={previewRec.imageUrl} alt={previewRec.name} className="w-full max-h-[60vh] object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-              <div className="absolute bottom-4 left-4">
-                <Badge variant="brand" className="mb-2">{previewRec.style}</Badge>
-                <h3 className="font-bold text-white text-xl">{previewRec.name}</h3>
-                <p className="text-white/70 text-sm">Est. {previewRec.budget}</p>
+            <div className="relative overflow-auto max-h-[60vh] bg-black/20">
+              <div
+                style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center', transition: 'transform 0.2s ease' }}
+              >
+                <img src={previewRec.imageUrl} alt={previewRec.name} className="w-full object-contain" />
               </div>
+            </div>
+            <div className="absolute bottom-4 left-4" style={{ display: zoomLevel === 1 ? 'block' : 'none' }}>
+              <Badge variant="brand" className="mb-2">{previewRec.style}</Badge>
+              <h3 className="font-bold text-white text-xl">{previewRec.name}</h3>
+              <p className="text-white/70 text-sm">Est. {previewRec.budget}</p>
             </div>
             <div className="p-5">
               <p className="text-text-muted text-sm leading-relaxed mb-4">{previewRec.description}</p>
@@ -708,15 +720,117 @@ export default function AIRecommenderPage() {
                 >
                   <Download className="w-4 h-4" /> Download
                 </Button>
+                {/* Task 3.2: Copy Share Link button in modal */}
                 <Button
                   variant="outline"
                   className="flex-1"
-                  onClick={() => shareRecommendation(previewRec)}
+                  onClick={() => copyShareLink(currentSessionId, previewRec)}
                 >
-                  <Share2 className="w-4 h-4" /> Share
+                  <Copy className="w-4 h-4" /> Copy Link
                 </Button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Task 3.1: Recommendation History Gallery Modal ── */}
+      {showHistoryGallery && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col">
+          <div className="bg-surface border-b border-surface-border px-6 py-4 flex items-center gap-4">
+            <button
+              onClick={() => setShowHistoryGallery(false)}
+              className="w-8 h-8 rounded-lg border border-surface-border text-text-muted hover:text-white flex items-center justify-center transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div>
+              <h2 className="font-display text-xl font-bold text-white flex items-center gap-2">
+                <History className="w-5 h-5 text-brand-400" /> Recommendation History
+              </h2>
+              <p className="text-text-muted text-xs">{savedRecommendations.length} past AI session{savedRecommendations.length !== 1 ? 's' : ''}</p>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-6">
+            {savedRecommendations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
+                <Sparkles className="w-12 h-12 text-text-muted/40" />
+                <p className="text-text-muted">No history yet. Generate your first AI design!</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {savedRecommendations.map((session) => (
+                  <div
+                    key={session.sessionId}
+                    className={cn(
+                      "group rounded-2xl border overflow-hidden bg-surface-card hover:border-brand-500/60 transition-all duration-300 hover:shadow-glow cursor-pointer",
+                      currentSessionId === session.sessionId ? "border-brand-500 shadow-glow" : "border-surface-border"
+                    )}
+                    onClick={() => { loadSessionFromHistory(session); setShowHistoryGallery(false); }}
+                  >
+                    {/* Thumbnail */}
+                    <div className="relative w-full h-44 overflow-hidden bg-surface">
+                      {session.imageUrl ? (
+                        <img
+                          src={session.imageUrl}
+                          alt={`Session ${session.metadata?.roomType || 'Design'}`}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Sparkles className="w-10 h-10 text-text-muted/30" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                      {/* Style chips */}
+                      <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap">
+                        {session.metadata?.styles?.slice(0, 2).map((s: string) => (
+                          <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-brand-600/80 text-white backdrop-blur-sm">{s}</span>
+                        ))}
+                      </div>
+                      {currentSessionId === session.sessionId && (
+                        <div className="absolute top-3 right-3">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/90 text-white font-medium">Current</span>
+                        </div>
+                      )}
+                      <div className="absolute bottom-3 left-3">
+                        <p className="text-white font-semibold text-sm">{session.metadata?.roomType || 'Room Design'}</p>
+                        <p className="text-white/60 text-xs">{session.metadata?.budget || ''}</p>
+                      </div>
+                    </div>
+
+                    {/* Card body */}
+                    <div className="p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-text-muted">
+                          {new Date(session.createdAt || session.metadata?.generatedAt || new Date()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                        <span className="text-xs text-brand-400">
+                          {session.recommendations?.length || 0} designs
+                        </span>
+                      </div>
+                      {/* Action buttons */}
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); loadSessionFromHistory(session); setShowHistoryGallery(false); }}
+                          className="flex-1 py-1.5 rounded-lg bg-brand-600/15 border border-brand-500/30 text-brand-300 text-xs font-medium hover:bg-brand-600/25 transition-colors"
+                        >
+                          Load
+                        </button>
+                        {/* Task 3.2: Copy share link from gallery */}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); copyShareLink(session.sessionId); }}
+                          className="px-2.5 py-1.5 rounded-lg border border-surface-border text-text-muted text-xs hover:border-brand-500/40 hover:text-brand-400 transition-colors"
+                          title="Copy share link"
+                        >
+                          <Link2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

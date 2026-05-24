@@ -6,7 +6,7 @@ import { Like } from '../models/Like.js';
 import { Follow } from '../models/Follow.js';
 import { authenticateToken, requireRole } from '../middleware/auth.js';
 import { sendDesignerApprovalEmail, sendDesignerRejectionEmail } from '../services/emailService.js';
-
+import { sendNotification } from '../services/notificationService.js';
 
 
 const router = express.Router();
@@ -194,7 +194,7 @@ router.put('/users/:id', async (req, res) => {
   }
 });
 
-// Approve/Reject Designer
+// Approve/Reject Designer (Task 2.2: handles rejected → approved re-approval flow)
 router.put('/users/:id/approve-designer', async (req, res) => {
   try {
     const { id } = req.params;
@@ -213,6 +213,7 @@ router.put('/users/:id/approve-designer', async (req, res) => {
       return res.status(400).json({ error: 'User is not a designer.' });
     }
 
+    const previousStatus = user.approvalStatus;
     user.approvalStatus = approvalStatus;
     await user.save();
 
@@ -220,10 +221,38 @@ router.put('/users/:id/approve-designer', async (req, res) => {
 
     if (approvalStatus === 'approved') {
       await sendDesignerApprovalEmail(user.email, designerName);
+
+      // Task 2.2: Emit real-time Socket.io notification when approving
+      // (especially important for the rejected → approved re-approval case)
+      try {
+        await sendNotification(user._id, {
+          title: previousStatus === 'rejected' ? '🎉 Re-Approved!' : '🎉 Application Approved!',
+          message: previousStatus === 'rejected'
+            ? 'Great news! Your designer application has been re-approved. You can now access the platform.'
+            : 'Congratulations! Your designer application has been approved. Welcome to the platform!',
+          type: 'designer_approved',
+          metadata: { approvalStatus, previousStatus }
+        });
+      } catch (notifErr) {
+        // Don't fail the request if notification fails
+        console.error('Failed to send approval notification:', notifErr);
+      }
     } else if (approvalStatus === 'rejected') {
       // Assuming a reason can be passed in the request body for rejection
       const rejectionReason = req.body.rejectionReason || "Your application did not meet our current criteria.";
       await sendDesignerRejectionEmail(user.email, designerName, rejectionReason);
+
+      // Emit real-time rejection notification
+      try {
+        await sendNotification(user._id, {
+          title: '❌ Application Rejected',
+          message: `Your designer application was rejected. Reason: ${rejectionReason}`,
+          type: 'designer_rejected',
+          metadata: { approvalStatus, rejectionReason }
+        });
+      } catch (notifErr) {
+        console.error('Failed to send rejection notification:', notifErr);
+      }
     }
 
     res.json({

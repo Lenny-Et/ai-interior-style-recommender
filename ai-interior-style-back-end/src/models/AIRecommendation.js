@@ -40,8 +40,8 @@ const aiRecommendationSchema = new mongoose.Schema({
   }],
   status: {
     type: String,
-    enum: ['active', 'archived'],
-    default: 'active'
+    enum: ['active', 'archived', 'permanent'],
+    default: 'permanent'  // Results are permanent by default — only deleted when user clicks Delete
   },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

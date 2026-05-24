@@ -257,6 +257,59 @@ router.post('/recommend', authenticateToken, async (req, res) => {
   }
 });
 
+// ===== PUBLIC ENDPOINTS =====
+
+// Get a shared recommendation by recommendation ID or session ID
+router.get('/share/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { AIRecommendation } = await import('../models/AIRecommendation.js');
+
+    // First try to find by recommendation ID within any session
+    let recommendation = await AIRecommendation.findOne({
+      'recommendations.id': id
+    }).lean();
+
+    let result = null;
+
+    if (recommendation) {
+      // Found a matching recommendation inside a session
+      const specificRec = recommendation.recommendations.find(r => r.id === id);
+      result = {
+        sessionInfo: {
+          sessionId: recommendation.sessionId,
+          metadata: recommendation.metadata,
+          createdAt: recommendation.createdAt
+        },
+        recommendation: specificRec
+      };
+    } else {
+      // Try to find by sessionId instead (to share the whole session)
+      recommendation = await AIRecommendation.findOne({ sessionId: id }).lean();
+      
+      if (recommendation) {
+        result = {
+          sessionInfo: {
+            sessionId: recommendation.sessionId,
+            metadata: recommendation.metadata,
+            createdAt: recommendation.createdAt
+          },
+          recommendations: recommendation.recommendations
+        };
+      }
+    }
+
+    if (!result) {
+      return res.status(404).json({ error: 'Recommendation not found' });
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Get shared recommendation error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Get user's AI recommendations history
 router.get('/recommendations', authenticateToken, async (req, res) => {
   try {
@@ -270,12 +323,12 @@ router.get('/recommendations', authenticateToken, async (req, res) => {
     const { AIRecommendation } = await import('../models/AIRecommendation.js');
     const normalizedUserId = userId.toString();
 
-    const recommendations = await AIRecommendation.find({ userId: normalizedUserId, status: 'active' })
+    const recommendations = await AIRecommendation.find({ userId: normalizedUserId, status: { $in: ['active', 'permanent'] } })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNum);
 
-    const total = await AIRecommendation.countDocuments({ userId: normalizedUserId, status: 'active' });
+    const total = await AIRecommendation.countDocuments({ userId: normalizedUserId, status: { $in: ['active', 'permanent'] } });
 
     res.json({
       recommendations,
@@ -987,7 +1040,7 @@ async function saveUserRecommendations(userId, recommendations, imageUrl, metada
     // Normalize userId to ensure consistency
     const normalizedUserId = userId.toString();
 
-    // Save the complete AI recommendation session
+    // Save the complete AI recommendation session — permanently (never auto-expires)
     const aiRecommendation = new AIRecommendation({
       userId: normalizedUserId,
       sessionId,
@@ -999,6 +1052,7 @@ async function saveUserRecommendations(userId, recommendations, imageUrl, metada
         creativity: metadata.creativity,
         generatedAt: metadata.generatedAt || new Date()
       },
+      status: 'permanent',
       recommendations: recommendations.map(rec => ({
         ...rec,
         // Ensure required fields are present

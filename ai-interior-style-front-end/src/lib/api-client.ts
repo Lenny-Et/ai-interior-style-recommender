@@ -284,6 +284,11 @@ class ApiClient {
     return this.request(`/ai/saved/${sessionId}?userId=${userId}`);
   }
 
+  async getSharedRecommendation(id: string) {
+    // Public endpoint, so no auth header needed
+    return this.request(`/ai/share/${id}`);
+  }
+
   async modifyAIRecommendation(recommendationId: string, modifications: any) {
     return this.request('/ai/modify', {
       method: 'POST',
@@ -415,23 +420,24 @@ class ApiClient {
     return this.request(`/boards/${boardId}/items?page=${page}&limit=${limit}`);
   }
 
-  async addItemToBoard(boardId: string, targetType: string, targetId: string) {
-    return this.request<{ message: string }>(`/boards/${boardId}/items`, {
+  async addBoardItem(boardId: string, data: { targetType: string; targetId: string }) {
+    return this.request(`/boards/${boardId}/items`, {
       method: 'POST',
-      body: JSON.stringify({ targetType, targetId }),
+      body: JSON.stringify(data),
     });
   }
 
-  async addAIItemToBoard(boardId: string, itemData: {
+  // Add AI generated recommendation to a board
+  async addAIItemToBoard(boardId: string, data: {
     imageUrl: string;
     name: string;
     style: string;
     roomType: string;
-    description: string;
+    description?: string;
   }) {
     return this.request<{ message: string, board: any }>(`/boards/${boardId}/ai-items`, {
       method: 'POST',
-      body: JSON.stringify(itemData),
+      body: JSON.stringify(data),
     });
   }
 
@@ -526,6 +532,10 @@ class ApiClient {
       });
     }
     return this.request(`/search/designers${queryParams.toString() ? `?${queryParams.toString()}` : ''}`);
+  }
+
+  async getHomeownerStats() {
+    return this.request<{ totalDesigns: number; savedBoards: number; pendingRequests: number }>('/homeowner/stats');
   }
 
   async getDesigner(id: string) {

@@ -38,27 +38,35 @@ export default function HomeownerDashboard() {
       
       const userId = user?.id || localStorage.getItem('userId') || '';
       
-      const [designersRes, aiRes, boardsRes, requestsRes] = await Promise.all([
-        apiClient.getDesigners({ limit: 3, sort: 'rating' }),
+      const [designersRes, aiRes, statsRes] = await Promise.all([
+        apiClient.getDesigners({ limit: 3, sortBy: 'rating' }),
         apiClient.getSavedAIRecommendations(userId, 1, 3),
-        apiClient.getBoards(1, 1),
-        apiClient.getCustomRequests(1, 1)
+        apiClient.getHomeownerStats().catch(() => null) // graceful fallback if endpoint not yet available
       ]);
 
       const designersData = (designersRes as any).users || (designersRes as any).data || [];
       const aiData = (aiRes as any).data?.recommendations || (aiRes as any).recommendations || (aiRes as any).data || [];
-      const boardsTotal = (boardsRes as any).pagination?.total || 0;
-      const requestsTotal = (requestsRes as any).pagination?.total || 0;
 
       setTopDesigners(designersData.slice(0, 3));
       setRecentDesigns(aiData.slice(0, 3));
       
-      setStats({
-        boards: boardsTotal,
-        generations: aiData.length || 0,
-        savedDesigns: aiData.reduce((acc: number, session: any) => acc + (session.recommendations?.length || 0), 0),
-        requests: requestsTotal
-      });
+      // Use real stats if available, otherwise fall back to local estimates
+      if (statsRes && typeof (statsRes as any).totalDesigns === 'number') {
+        const s = statsRes as any;
+        setStats({
+          boards: s.savedBoards ?? 0,
+          generations: s.totalDesigns ?? 0,
+          savedDesigns: aiData.reduce((acc: number, session: any) => acc + (session.recommendations?.length || 0), 0),
+          requests: s.pendingRequests ?? 0
+        });
+      } else {
+        setStats({
+          boards: 0,
+          generations: aiData.length || 0,
+          savedDesigns: aiData.reduce((acc: number, session: any) => acc + (session.recommendations?.length || 0), 0),
+          requests: 0
+        });
+      }
       
     } catch (error) {
       console.error("Failed to load dashboard data:", error);

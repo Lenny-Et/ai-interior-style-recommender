@@ -15,7 +15,7 @@ const passwordResetTokenSchema = new mongoose.Schema({
   expiresAt: { 
     type: Date, 
     required: true,
-    default: () => new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
+    default: () => new Date(Date.now() + 60 * 60 * 1000) // 1 hour
   },
   isUsed: { 
     type: Boolean, 

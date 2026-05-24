@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
+    unoptimized: true,
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
       { protocol: "https", hostname: "plus.unsplash.com" },
@@ -11,7 +12,6 @@ const nextConfig = {
       { protocol: "https", hostname: "via.placeholder.com" }, // Added for mock images
       { protocol: "http", hostname: "localhost" },
     ],
-
   },
 };
 

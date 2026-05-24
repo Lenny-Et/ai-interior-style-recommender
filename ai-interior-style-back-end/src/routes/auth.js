@@ -1,5 +1,8 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { User } from '../models/User.js';
 import { sendPasswordResetEmail, sendNewDesignerSignupEmail } from '../services/emailService.js';
 import { generatePasswordResetToken, validatePasswordResetToken, markTokenAsUsed } from '../utils/tokenUtils.js';
@@ -8,10 +11,58 @@ import asyncHandler from '../middleware/asyncHandler.js';
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_develop_only_change_in_production';
 
-router.post('/register', asyncHandler(async (req, res) => {
-  const { email, password, role, profile } = req.body;
+// Multer setup for CV/resume uploads
+const CV_UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'cvs');
+if (!fs.existsSync(CV_UPLOAD_DIR)) fs.mkdirSync(CV_UPLOAD_DIR, { recursive: true });
+
+const cvStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, CV_UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `cv-${Date.now()}${ext}`);
+  }
+});
+
+const cvUpload = multer({
+  storage: cvStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.pdf', '.doc', '.docx'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF and Word documents (.pdf, .doc, .docx) are accepted for CVs.'));
+    }
+  }
+});
+
+router.post('/register', cvUpload.single('cv'), asyncHandler(async (req, res) => {
+  const { email, password, role } = req.body;
+  // profile may come as a JSON string (multipart) or a parsed object (JSON body)
+  let profile = req.body.profile;
+  if (typeof profile === 'string') {
+    try { profile = JSON.parse(profile); } catch { profile = {}; }
+  }
+
   // Basic validation
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+
+  // Task 2.4 — If a CV file was uploaded, use its server path; otherwise fall back to cvUrl text
+  if (req.file) {
+    profile = profile || {};
+    profile.cvUrl = `/uploads/cvs/${req.file.filename}`;
+  }
+
+  // Task 2.1 — Designer-specific field validation
+  if (role === 'designer') {
+    if (!profile?.cvUrl || !profile.cvUrl.trim()) {
+      return res.status(400).json({
+        error: 'CV / experience link is required for designer registration.'
+      });
+    }
+    // portfolioUrl is optional — no validation needed
+  }
 
   const existingUser = await User.findOne({ email });
   if (existingUser) return res.status(400).json({ error: 'Email already in use' });

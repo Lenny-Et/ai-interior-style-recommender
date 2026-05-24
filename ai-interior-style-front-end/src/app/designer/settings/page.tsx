@@ -98,7 +98,7 @@ export default function DesignerSettingsPage() {
               src={user?.avatarUrl} 
               name={`${profileData.firstName} ${profileData.lastName}`} 
               size="lg" 
-              verified={user?.verified}
+              verified={(user as any)?.verified}
             />
             <Button variant="ghost" size="sm" className="absolute bottom-0 right-0 p-1 rounded-full bg-surface-card border border-surface-border">
               <Camera className="w-3 h-3" />

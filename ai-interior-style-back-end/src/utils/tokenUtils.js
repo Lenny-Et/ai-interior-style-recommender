@@ -9,9 +9,9 @@ export const generatePasswordResetToken = async (userId) => {
   // Clean up any existing tokens for this user
   await PasswordResetToken.deleteMany({ userId });
   
-  // Generate new token
+  // Generate new token with 1-hour expiry (Task 2.3)
   const token = generateSecureToken(32);
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
   
   const resetToken = new PasswordResetToken({
     userId,

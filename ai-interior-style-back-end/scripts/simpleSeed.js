@@ -118,7 +118,7 @@ async function ultraSeed() {
         'https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=1800&q=80',
         'https://images.unsplash.com/photo-1516455590571-18256e5bb9ff?auto=format&fit=crop&w=1800&q=80',
         'https://images.unsplash.com/photo-1486304873000-235643847519?auto=format&fit=crop&w=1800&q=80',
-        'https://images.unsplash.com/photo-1505693416388-84cd096d1713?auto=format&fit=crop&w=1700&q=80',
+        'https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1700&q=80',
 
         'https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1700&q=80',
         'https://images.unsplash.com/photo-1494526585095-c41746248156?auto=format&fit=crop&w=1700&q=80',

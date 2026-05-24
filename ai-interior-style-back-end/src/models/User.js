@@ -8,18 +8,35 @@ const userSchema = new mongoose.Schema({
 
   approvalStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' }, // For designers
   isPro: { type: Boolean, default: false }, // Indicates if user has a forever pro account
+  isBlocked: { type: Boolean, default: false },
+  blockReason: { type: String },
   profile: {
     firstName: String,
     lastName: String,
     company: String,
-    portfolioUrl: String,
+    portfolioUrl: String, // Optional — designer's external portfolio link
+    specialization: { type: String }, // e.g. 'Modern', 'Scandinavian' — used for style-based designer search
+    portfolioTags: [String],         // Additional style tags e.g. ['Minimalist', 'Industrial']
     workHistory: [{
       title: String,
       description: String,
       startDate: Date,
       endDate: Date,
     }],
-    cvUrl: String,
+    // cv_experience: required for designer registration (can be a URL to CV/resume or uploaded file path)
+    cvUrl: {
+      type: String,
+      validate: {
+        validator: function(v) {
+          // Required only when role is 'designer'
+          if (this.role === 'designer') {
+            return !!(v && v.trim().length > 0);
+          }
+          return true;
+        },
+        message: 'CV / experience link is required for designer accounts.'
+      }
+    },
   }
 }, { timestamps: true,
   toJSON: {

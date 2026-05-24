@@ -51,6 +51,7 @@ interface CustomRequest {
     sender: string;
     message: string;
     createdAt: string;
+    attachments?: Array<{ url: string; [key: string]: any }>;
   }>;
 }
 

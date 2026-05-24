@@ -216,8 +216,20 @@ export default function DesignerSearchPage() {
       {!loading && !error && designers.length === 0 && (
         <div className="text-center py-16 border border-dashed border-surface-border rounded-2xl">
           <Users className="w-8 h-8 text-brand-500/40 mx-auto mb-3" />
-          <p className="text-white font-medium mb-1">No designers found</p>
-          <p className="text-text-muted text-sm">Try adjusting your search or filter.</p>
+          <p className="text-white font-medium mb-1">
+            {styleFilter ? `No designers found in "${styleFilter}" style` : "No designers found"}
+          </p>
+          <p className="text-text-muted text-sm">
+            {styleFilter ? "Try selecting a different style or clear the filter to see all designers." : "Try adjusting your search or filter."}
+          </p>
+          {styleFilter && (
+            <button
+              onClick={() => setStyleFilter("")}
+              className="mt-3 px-4 py-1.5 rounded-full text-xs font-medium border border-brand-500/40 text-brand-400 hover:bg-brand-600/10 transition-all"
+            >
+              Clear style filter
+            </button>
+          )}
         </div>
       )}
 
@@ -265,7 +277,7 @@ export default function DesignerSearchPage() {
                   {/* Actions */}
                   <div className="flex gap-2 mb-2">
                     <Button
-                      variant={isFollowing ? "default" : "ghost"}
+                      variant={isFollowing ? "brand" : "ghost"}
                       size="sm"
                       className="flex-1"
                       onClick={() => handleFollow(d._id)}

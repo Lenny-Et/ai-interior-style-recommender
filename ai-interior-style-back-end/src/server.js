@@ -28,6 +28,7 @@ import paymentRoutes from './routes/payment.js';
 import userDesignsRoutes from './routes/userDesigns.js';
 import { initNotificationService } from './services/notificationService.js';
 import { startExpirationWorker } from './workers/expirationWorker.js';
+import homeownerStatsRoutes from './routes/homeownerStats.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -118,6 +119,7 @@ app.use('/api/designer/analytics', designerAnalyticsRoutes);
 app.use('/api/admin/analytics', adminAnalyticsRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/user-designs', userDesignsRoutes);
+app.use('/api/homeowner', homeownerStatsRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Auth service running' });

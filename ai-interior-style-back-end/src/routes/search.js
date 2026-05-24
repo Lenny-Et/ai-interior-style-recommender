@@ -185,6 +185,7 @@ router.get('/designers', async (req, res) => {
     const {
       q = '',
       specialty,
+      style,       // Style-based filter: e.g. 'Modern', 'Scandinavian'
       verified,
       minProjects,
       maxProjects,
@@ -210,10 +211,16 @@ router.get('/designers', async (req, res) => {
       ];
     }
 
-    // Specialty filter
-    if (specialty) {
-      const specialties = Array.isArray(specialty) ? specialty : [specialty];
-      query.specialty = { $in: specialties };
+    // Style / specialty filter — checks specialization, portfolioTags, and legacy specialties fields
+    const styleValue = style || specialty;
+    if (styleValue) {
+      const styleValues = Array.isArray(styleValue) ? styleValue : [styleValue];
+      query.$or = [
+        ...(query.$or || []),
+        { 'profile.specialties': { $in: styleValues.map(s => new RegExp(s, 'i')) } },
+        { 'profile.specialization': { $in: styleValues.map(s => new RegExp(s, 'i')) } },
+        { 'profile.portfolioTags': { $in: styleValues.map(s => new RegExp(s, 'i')) } }
+      ];
     }
 
     // Verification filter

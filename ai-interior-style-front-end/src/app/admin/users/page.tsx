@@ -333,7 +333,6 @@ export default function UserManagementPage() {
                           <Badge variant={u.approvalStatus ? APPROVAL_STATUS_VARIANT[u.approvalStatus] : "gray"}>
                             {u.approvalStatus || "unknown"}
                           </Badge>
-                          {u.isPro && <Badge variant="purple">PRO</Badge>}
                         </div>
                       ) : (
                         <Badge variant={u.status ? STATUS_VARIANT[u.status] : "gray"}>{u.status || "unknown"}</Badge>
@@ -364,22 +363,24 @@ export default function UserManagementPage() {
                         >
                           <CheckCircle className="w-3.5 h-3.5" />
                         </button>
-                        {u.role === "designer" && u.approvalStatus === "pending" && (
+                        {u.role === "designer" && (u.approvalStatus === "pending" || u.approvalStatus === "rejected") && (
                           <>
                             <button
                               onClick={() => approveDesigner(u._id)}
-                              title="Approve Designer"
+                              title={u.approvalStatus === "rejected" ? "Re-Approve Designer" : "Approve Designer"}
                               className="w-7 h-7 rounded-lg border border-green-500/40 bg-green-600/10 text-green-400 flex items-center justify-center transition-all hover:brightness-110"
                             >
                               <CheckCircle className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              onClick={() => rejectDesigner(u._id)}
-                              title="Reject Designer"
-                              className="w-7 h-7 rounded-lg border border-red-500/40 bg-red-600/10 text-red-400 flex items-center justify-center transition-all hover:brightness-110"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
+                            {u.approvalStatus === "pending" && (
+                              <button
+                                onClick={() => rejectDesigner(u._id)}
+                                title="Reject Designer"
+                                className="w-7 h-7 rounded-lg border border-red-500/40 bg-red-600/10 text-red-400 flex items-center justify-center transition-all hover:brightness-110"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </>
                         )}
                         {u.role === "designer" && (

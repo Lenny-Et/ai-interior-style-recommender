@@ -341,7 +341,7 @@ export default function StyleBoardsPage() {
       const boardResponse = await apiClient.getBoards(1, 20);
       const boardsData = (boardResponse as any).data || boardResponse;
       const updatedBoards = boardsData.boards || [];
-      const updatedBoard = updatedBoards.find(board => board._id === selectedBoard._id);
+      const updatedBoard = updatedBoards.find((board: any) => board._id === selectedBoard._id);
       if (updatedBoard) {
         setSelectedBoard(updatedBoard);
       }
