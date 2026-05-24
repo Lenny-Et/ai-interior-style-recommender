@@ -14,13 +14,17 @@ const saveSchema = new mongoose.Schema({
   targetId: { 
     type: mongoose.Schema.Types.ObjectId, 
     required: true 
+  },
+  boardId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Board'
   }
 }, { 
   timestamps: true 
 });
 
 // Compound index to prevent duplicate saves and for efficient queries
-saveSchema.index({ userId: 1, targetType: 1, targetId: 1 }, { unique: true });
+saveSchema.index({ userId: 1, targetType: 1, targetId: 1, boardId: 1 }, { unique: true });
 
 // Index for finding saves on specific content
 saveSchema.index({ targetType: 1, targetId: 1 });

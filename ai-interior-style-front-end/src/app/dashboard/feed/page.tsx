@@ -44,6 +44,10 @@ export default function FeedPage() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null);
   const [selectedBoard, setSelectedBoard] = useState<string | null>(null);
+  const [showCommentModal, setShowCommentModal] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [loadingComments, setLoadingComments] = useState(false);
 
   useEffect(() => {
     loadFeed();
@@ -156,6 +160,44 @@ export default function FeedPage() {
     }
   };
 
+  const openCommentModal = async (item: FeedItem) => {
+    setSelectedItem(item);
+    setShowCommentModal(true);
+    setComments([]);
+    setLoadingComments(true);
+    try {
+      const res = await apiClient.getComments('portfolio', item.id);
+      setComments((res as any).comments || []);
+    } catch (error: any) {
+      toast.error(error.error || error.message || "Failed to load comments");
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const submitComment = async () => {
+    if (!selectedItem || !newComment.trim()) return;
+
+    try {
+      const res = await apiClient.addComment('portfolio', selectedItem.id, newComment.trim());
+      const addedComment = (res as any).comment;
+      
+      setComments(prev => [addedComment, ...prev]);
+      setNewComment("");
+      
+      // Update comment count on feed items
+      setFeedItems(prev => prev.map(item => 
+        item.id === selectedItem.id 
+          ? { ...item, commentCount: item.commentCount + 1 }
+          : item
+      ));
+      
+      toast.success("Comment added successfully!");
+    } catch (error: any) {
+      toast.error(error.error || error.message || "Failed to add comment");
+    }
+  };
+
   const filtered = feedItems.filter((item) => {
     if (styleFilter && item.metadata.style !== styleFilter) return false;
     if (roomFilter && item.metadata.roomType !== roomFilter) return false;
@@ -244,7 +286,7 @@ export default function FeedPage() {
                     <button onClick={() => openSaveModal(item)} className={cn("flex items-center gap-1 text-xs transition-colors", item.isSaved ? "text-blue-400" : "text-white/70 hover:text-blue-400")}>
                       <FolderHeart className={cn("w-4 h-4", item.isSaved && "fill-blue-400")} />
                     </button>
-                    <button className="flex items-center gap-1 text-xs text-white/70 hover:text-blue-400 transition-colors">
+                    <button onClick={() => openCommentModal(item)} className="flex items-center gap-1 text-xs text-white/70 hover:text-blue-400 transition-colors">
                       <MessageCircle className="w-4 h-4" />{item.commentCount}
                     </button>
                   </div>
@@ -346,6 +388,97 @@ export default function FeedPage() {
                   Save to Board
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comments Modal */}
+      {showCommentModal && selectedItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="glass rounded-2xl border border-brand-500/30 p-6 max-w-lg w-full animate-slide-up flex flex-col max-h-[85vh]">
+            <div className="flex items-center justify-between mb-4 flex-shrink-0">
+              <h3 className="font-semibold text-white">Comments ({selectedItem.commentCount})</h3>
+              <button onClick={() => { setShowCommentModal(false); setSelectedItem(null); }} className="text-text-muted hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Design detail */}
+            <div className="flex gap-4 p-3 rounded-xl bg-surface border border-surface-border mb-4 flex-shrink-0">
+              <div className="w-16 h-16 rounded-lg overflow-hidden bg-surface-hover relative flex-shrink-0">
+                <Image 
+                  src={selectedItem.imageUrl} 
+                  alt="Design" 
+                  fill
+                  className="object-cover" 
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-brand-400 font-semibold uppercase">{selectedItem.metadata.style} • {selectedItem.metadata.roomType}</p>
+                <p className="text-sm text-white truncate mt-1">{selectedItem.description || "No description provided"}</p>
+                <p className="text-xs text-text-muted mt-0.5">by {selectedItem.designerId.profile.firstName} {selectedItem.designerId.profile.lastName}</p>
+              </div>
+            </div>
+
+            {/* Comments list */}
+            <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-1">
+              {loadingComments ? (
+                <div className="text-center py-8 text-text-muted">
+                  <div className="w-6 h-6 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                  <p className="text-xs">Loading comments...</p>
+                </div>
+              ) : comments.length > 0 ? (
+                comments.map((comment) => (
+                  <div key={comment._id} className="flex gap-3 text-sm border-b border-surface-border/50 pb-3">
+                    <div className="w-8 h-8 rounded-full overflow-hidden bg-brand-500/20 flex-shrink-0 relative">
+                      {comment.userId?.profile?.profilePicture ? (
+                        <Image src={comment.userId.profile.profilePicture} alt="" fill className="object-cover animate-fade-in" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-brand-600/30 text-brand-300 font-bold text-xs">
+                          {comment.userId?.profile?.firstName?.charAt(0) || 'U'}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="font-semibold text-white text-xs">
+                          {comment.userId?.profile?.firstName} {comment.userId?.profile?.lastName}
+                        </span>
+                        <span className="text-[10px] text-text-muted">
+                          {new Date(comment.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-purple-100 text-xs mt-1 whitespace-pre-wrap">{comment.content}</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-12 text-text-muted">
+                  <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-35" />
+                  <p className="text-sm">No comments yet</p>
+                  <p className="text-xs mt-1">Be the first to share your thoughts!</p>
+                </div>
+              )}
+            </div>
+
+            {/* Add comment form */}
+            <div className="flex gap-2 pt-2 border-t border-surface-border flex-shrink-0">
+              <input
+                type="text"
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && submitComment()}
+                placeholder="Write a comment..."
+                className="flex-1 px-4 py-2.5 rounded-xl bg-surface-card border border-surface-border text-sm text-purple-100 placeholder-text-muted focus:outline-none focus:border-brand-500 transition-all"
+              />
+              <Button 
+                onClick={submitComment}
+                disabled={!newComment.trim()}
+                size="sm"
+              >
+                Post
+              </Button>
             </div>
           </div>
         </div>

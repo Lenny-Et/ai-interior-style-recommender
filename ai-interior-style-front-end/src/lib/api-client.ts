@@ -207,6 +207,23 @@ class ApiClient {
     });
   }
 
+  async addComment(targetType: string, targetId: string, content: string) {
+    return this.request<{ comment: any; message: string }>(`/social/comment/${targetType}/${targetId}`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  async getComments(targetType: string, targetId: string, page = 1, limit = 10) {
+    return this.request<{ comments: any[]; pagination: any }>(`/social/comments/${targetType}/${targetId}?page=${page}&limit=${limit}`);
+  }
+
+  async deleteComment(commentId: string) {
+    return this.request<{ message: string }>(`/social/comment/${commentId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Feed endpoints
   async getFeed(page = 1, limit = 20) {
     return this.request('/feed?page=' + page + '&limit=' + limit);

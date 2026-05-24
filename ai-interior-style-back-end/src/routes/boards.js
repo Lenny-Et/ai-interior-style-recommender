@@ -30,18 +30,19 @@ router.get('/', authenticateToken, async (req, res) => {
     const boardsWithCounts = await Promise.all(
       boards.map(async (board) => {
         const saveCount = await Save.countDocuments({
-          targetType: 'board',
-          targetId: board._id
+          boardId: board._id,
+          targetType: { $in: ['portfolio', 'design'] }
         });
         const totalCount = saveCount + (board.items?.length || 0);
         
         // Get sample items for the board (portfolio items saved to this board)
         const sampleItems = await Save.find({
-          targetType: 'portfolio',
-          userId: userId
+          boardId: board._id,
+          targetType: { $in: ['portfolio', 'design'] }
         })
         .populate({
           path: 'targetId',
+          model: 'PortfolioItem',
           select: 'imageUrl metadata style roomType'
         })
         .limit(3);
@@ -155,12 +156,7 @@ router.delete('/:boardId', authenticateToken, async (req, res) => {
     }
 
     // Remove all saves associated with this board
-    await Save.deleteMany({
-      $or: [
-        { targetType: 'board', targetId: boardId },
-        { userId: userId, targetType: 'portfolio' } // Remove portfolio saves from this user's boards
-      ]
-    });
+    await Save.deleteMany({ boardId });
 
     await Board.findByIdAndDelete(boardId);
 
@@ -187,11 +183,27 @@ router.post('/:boardId/items', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Board not found' });
     }
 
+    // Normalize targetType ('design' is actually saved as 'portfolio' in DB)
+    const normalizedTargetType = targetType === 'design' ? 'portfolio' : targetType;
+
+    // Check if already saved in this board
+    const existingSave = await Save.findOne({
+      userId,
+      targetType: normalizedTargetType,
+      targetId,
+      boardId
+    });
+
+    if (existingSave) {
+      return res.status(400).json({ error: 'Item already saved in this board' });
+    }
+
     // Create a save record linking the item to the board
     const save = new Save({
       userId,
-      targetType,
-      targetId
+      targetType: normalizedTargetType,
+      targetId,
+      boardId
     });
 
     await save.save();
@@ -286,11 +298,13 @@ router.get('/:boardId/items', authenticateToken, async (req, res) => {
     const skip = (pageNum - 1) * limitNum;
 
     const saves = await Save.find({
+      boardId,
       userId,
-      targetType: 'portfolio'
+      targetType: { $in: ['portfolio', 'design'] }
     })
     .populate({
       path: 'targetId',
+      model: 'PortfolioItem',
       select: 'imageUrl description metadata designerId createdAt'
     })
     .sort({ createdAt: -1 })
