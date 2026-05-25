@@ -271,9 +271,8 @@ router.get('/', authenticateToken, async (req, res) => {
       let sanitizedImageUrl = item.imageUrl;
       if (sanitizedImageUrl) {
         try {
-          const url = new URL(sanitizedImageUrl);
-          sanitizedImageUrl = url.origin + encodeURI(url.pathname);
-          if (url.search) sanitizedImageUrl += url.search;
+          // If new URL succeeds, the URL is already valid. No need to double-encode it.
+          new URL(sanitizedImageUrl);
         } catch (urlError) {
           sanitizedImageUrl = sanitizedImageUrl.replace(/[^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]/g, encodeURIComponent);
         }

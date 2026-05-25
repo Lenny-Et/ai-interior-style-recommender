@@ -35,7 +35,6 @@ export default function AIRecommenderPage() {
   const [step, setStep] = useState<Step>("upload");
   const [preview, setPreview] = useState<string | null>(null);
   const [roomType, setRoomType] = useState("Living Room");
-  const [budget, setBudget] = useState("$1,000–$2,500");
   const [styles, setStyles] = useState<string[]>([]);
   const [usePersonalization, setUsePersonalization] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -47,7 +46,7 @@ export default function AIRecommenderPage() {
   const [currentLimitType, setCurrentLimitType] = useState<string | null>(null);
   const [previewRec, setPreviewRec] = useState<AIRecommendation | null>(null);
   const [previewImgLoaded, setPreviewImgLoaded] = useState(false);
-  
+
   // Board Save State
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [itemToSave, setItemToSave] = useState<AIRecommendation | null>(null);
@@ -160,7 +159,7 @@ export default function AIRecommenderPage() {
   const loadSavedRecommendations = async (specificSessionId?: string) => {
     try {
       const userId = user?.id;
-      
+
       if (!userId) return;
 
       if (specificSessionId) {
@@ -180,10 +179,8 @@ export default function AIRecommenderPage() {
             setPreview(saved.imageUrl);
           }
 
-          // Set preferences from saved session
           if (saved.metadata) {
             setRoomType(saved.metadata.roomType || "Living Room");
-            setBudget(saved.metadata.budget || "$1,000–$2,500");
             setStyles(saved.metadata.styles || []);
           }
 
@@ -213,7 +210,6 @@ export default function AIRecommenderPage() {
           // Set preferences from saved session
           if (mostRecent.metadata) {
             setRoomType(mostRecent.metadata.roomType || "Living Room");
-            setBudget(mostRecent.metadata.budget || "$1,000–$2,500");
             setStyles(mostRecent.metadata.styles || []);
           }
         }
@@ -254,15 +250,20 @@ export default function AIRecommenderPage() {
       if (uploadedImage) {
         const formData = new FormData();
         formData.append('image', uploadedImage);
-        
+        formData.append('roomType', roomType);
+
+        if (styles.length > 0) {
+          formData.append('styles', JSON.stringify(styles));
+        }
+
         const uploadResponse = await fetch('http://localhost:5000/api/ai/upload-image', {
           method: 'POST',
           body: formData
         });
-        
+
         console.log('Upload response status:', uploadResponse.status);
         console.log('Upload response ok:', uploadResponse.ok);
-        
+
         if (uploadResponse.ok) {
           const uploadResult = await uploadResponse.json();
           imageUrl = uploadResult.imageUrl;
@@ -277,7 +278,7 @@ export default function AIRecommenderPage() {
 
       // Get AI recommendations
       const userId = user?.id;
-      
+
       if (!userId) {
         toast.error("Please log in to use the AI recommender");
         setStep("prefs");
@@ -288,7 +289,6 @@ export default function AIRecommenderPage() {
         imageUrl,
         roomType,
         styles,
-        budget,
         creativity: "0.7",
         usePersonalization,
         userId
@@ -450,20 +450,6 @@ export default function AIRecommenderPage() {
                 ))}
               </div>
             </div>
-            {/* Budget */}
-            <div>
-              <label className="text-xs font-semibold text-purple-300 uppercase tracking-wider mb-2 block">Budget Range</label>
-              <div className="flex flex-wrap gap-2">
-                {BUDGET_RANGES.map((b) => (
-                  <button key={b} onClick={() => setBudget(b)}
-                    className={cn("px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
-                      budget === b ? "border-gold-500 bg-gold-500/10 text-gold-400" : "border-surface-border text-text-muted hover:border-gold-500/40"
-                    )}>
-                    {b}
-                  </button>
-                ))}
-              </div>
-            </div>
             {/* Styles */}
             <div>
               <label className="text-xs font-semibold text-purple-300 uppercase tracking-wider mb-2 block">Preferred Styles (optional)</label>
@@ -481,8 +467,8 @@ export default function AIRecommenderPage() {
 
             {/* Personalization Toggle */}
             <div className="bg-brand-600/10 border border-brand-500/20 rounded-xl p-4 flex items-start gap-3 mt-2 transition-all hover:border-brand-500/40">
-              <input 
-                type="checkbox" 
+              <input
+                type="checkbox"
                 id="personalization-toggle"
                 className="mt-1 w-4 h-4 rounded border-brand-400 text-brand-500 focus:ring-brand-500 bg-surface-card cursor-pointer"
                 checked={usePersonalization}

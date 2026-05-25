@@ -37,6 +37,11 @@ export default function RegisterPage() {
     e.preventDefault();
     
     try {
+      if (form.password.length < 8 || !/[!@#$%^&*(),.?":{}|<>]/.test(form.password)) {
+        toast.error("Password must be at least 8 characters and include a special character.");
+        return;
+      }
+      
       const [firstName, ...lastNameParts] = form.name.split(' ');
       const lastName = lastNameParts.join(' ');
       

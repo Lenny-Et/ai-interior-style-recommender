@@ -9,10 +9,10 @@ const nextConfig = {
       { protocol: "https", hostname: "loremflickr.com" },
       { protocol: "https", hostname: "image.pollinations.ai" },
       { protocol: "https", hostname: "via.placeholder.com" }, // Added for mock images
-      { protocol: "http", hostname: "localhost", port: "5000" },
-      { protocol: "http", hostname: "127.0.0.1", port: "5000" },
+      { protocol: "http", hostname: "localhost", port: "5000", pathname: "/**" },
+      { protocol: "http", hostname: "127.0.0.1", port: "5000", pathname: "/**" },
     ],
-    unoptimized: process.env.NODE_ENV === 'development',
+    unoptimized: true, // Set to true to allow localhost/private IP image fetching without Next.js server blocking it
   },
 };
 

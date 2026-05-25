@@ -280,7 +280,6 @@ class ApiClient {
     imageUrl: string;
     roomType: string;
     styles: string[];
-    budget: string;
     creativity: string;
     usePersonalization?: boolean;
     userId?: string;

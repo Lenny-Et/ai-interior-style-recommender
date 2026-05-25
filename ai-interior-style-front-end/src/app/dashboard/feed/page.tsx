@@ -57,6 +57,35 @@ export default function FeedPage() {
   useEffect(() => {
     loadFeed(1);
     loadBoards();
+
+    // Setup automatic background polling every 10 seconds
+    const interval = setInterval(() => {
+      // Only poll if we are at the top of the page to avoid breaking scroll position
+      if (window.scrollY === 0) {
+        apiClient.getFeed({
+          page: 1,
+          limit: 20,
+          followingOnly,
+          likesOnly
+        }).then((response: any) => {
+          const items = response.feed || [];
+          const itemsArray = Array.isArray(items) ? items : [];
+          // Update the feed if we find new items
+          if (itemsArray.length > 0) {
+            setFeedItems(prev => {
+              // Simple check to see if top item changed to avoid unnecessary re-renders
+              if (prev.length > 0 && itemsArray[0].id === prev[0].id) {
+                return prev;
+              }
+              return itemsArray;
+            });
+            setPage(1);
+          }
+        }).catch(err => console.error("Background poll error", err));
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
   }, [search, styleFilter, roomFilter, followingOnly, likesOnly]);
 
   const loadFeed = async (pageNum = 1) => {
@@ -321,7 +350,7 @@ export default function FeedPage() {
           const designerName = `${item.designerId.profile.firstName} ${item.designerId.profile.lastName}`;
           return (
             <div key={item.id} className="break-inside-avoid group relative rounded-2xl overflow-hidden border border-surface-border bg-surface-card hover:border-brand-500/40 hover:shadow-glow-sm transition-all duration-300">
-              <Image src={item.imageUrl} alt={item.metadata.style} width={500} height={400} className="w-full object-cover group-hover:scale-105 transition-transform duration-500" />
+              <Image src={item.imageUrl} alt={item.metadata.style} width={500} height={400} className="w-full object-cover group-hover:scale-105 transition-transform duration-500" unoptimized={true} />
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               <div className="absolute bottom-0 left-0 right-0 p-3 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
                 <div className="flex items-center justify-between">

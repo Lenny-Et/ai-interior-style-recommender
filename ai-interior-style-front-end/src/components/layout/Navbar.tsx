@@ -1,6 +1,6 @@
 "use client";
 import { useAppStore } from "@/lib/store";
-import { Bell, Menu, Search, Moon, Sun, Command } from "lucide-react";
+import { Bell, Menu, Search, Moon, Sun, Command, Sparkles } from "lucide-react";
 import Link from "next/link";
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
@@ -44,10 +44,17 @@ export default function Navbar() {
 
       {/* Right: Actions */}
       <div className="flex items-center gap-1 ml-auto">
-        {user && !user.isPro && (
-          <Link href="/dashboard/settings" className="text-sm font-medium text-brand-400 hover:text-brand-300 transition-colors px-3 py-2 rounded-lg bg-brand-600/10 border border-brand-500/30">
-            Upgrade to Pro
-          </Link>
+        {user && user.role === 'homeowner' && (
+          !user.isPro ? (
+            <Link href="/dashboard/settings" className="text-sm font-medium text-brand-400 hover:text-brand-300 transition-colors px-3 py-2 rounded-lg bg-brand-600/10 border border-brand-500/30">
+              Upgrade to Pro
+            </Link>
+          ) : (
+            <span className="text-sm font-medium text-gold-400 px-3 py-2 rounded-lg bg-gold-500/10 border border-gold-500/30 flex items-center gap-1.5 cursor-default">
+              <Sparkles className="w-3.5 h-3.5" />
+              Pro
+            </span>
+          )
         )}
         {/* Theme Toggle */}
         <button

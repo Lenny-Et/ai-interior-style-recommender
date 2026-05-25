@@ -229,7 +229,14 @@ export const useAppStore = create<AppState>()(
         }
       },
 
-      setUser: (user) => set({ user }),
+      setUser: (user) => {
+        set({ user });
+        if (user) {
+          localStorage.setItem('user_data', JSON.stringify(user));
+        } else {
+          localStorage.removeItem('user_data');
+        }
+      },
 
       updateUserProfile: async (profileData: any) => {
         const { user } = get();
@@ -240,13 +247,15 @@ export const useAppStore = create<AppState>()(
           await apiClient.updateProfile(user.id, profileData);
           
           // Update local user data
+          const updatedUser = {
+            ...user,
+            profile: { ...user.profile, ...profileData }
+          };
           set({
-            user: {
-              ...user,
-              profile: { ...user.profile, ...profileData }
-            },
+            user: updatedUser,
             isLoading: false
           });
+          localStorage.setItem('user_data', JSON.stringify(updatedUser));
         } catch (error: any) {
           set({
             error: error.error || error.message || 'Profile update failed',

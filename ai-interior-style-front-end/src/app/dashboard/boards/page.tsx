@@ -77,6 +77,18 @@ export default function StyleBoardsPage() {
 
   useEffect(() => {
     loadBoards();
+    
+    // Auto refresh the boards list every 10 seconds silently
+    const interval = setInterval(() => {
+      apiClient.getBoards(1, 20)
+        .then((response: any) => {
+          const boardsData = response.data || response;
+          if (boardsData.boards) setBoards(boardsData.boards);
+        })
+        .catch(err => console.error("Silent boards refresh failed", err));
+    }, 10000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const loadBoards = async () => {
@@ -108,13 +120,13 @@ export default function StyleBoardsPage() {
 
       const newBoard = (response as any).data || response;
       setBoards(prev => [newBoard.board, ...prev]);
-      
+
       // Reset form
       setNewBoardName("");
       setNewBoardDescription("");
       setNewBoardTags([]);
       setShowNew(false);
-      
+
       toast.success("Board created successfully!");
     } catch (error: any) {
       toast.error(error.error || error.message || "Failed to create board");
@@ -159,7 +171,7 @@ export default function StyleBoardsPage() {
   const shareBoard = async (board: Board) => {
     try {
       const shareUrl = `${window.location.origin}/boards/${board._id}`;
-      
+
       if (navigator.share) {
         // Use native share API on mobile
         await navigator.share({
@@ -230,7 +242,7 @@ export default function StyleBoardsPage() {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      
+
       toast.success("Board exported successfully!");
     } catch (error) {
       console.error('Export error:', error);
@@ -254,10 +266,10 @@ export default function StyleBoardsPage() {
       });
 
       const updatedBoard = (response as any).data || response;
-      setBoards(prev => prev.map(board => 
+      setBoards(prev => prev.map(board =>
         board._id === editingBoard._id ? updatedBoard.board : board
       ));
-      
+
       // Reset form
       setNewBoardName("");
       setNewBoardDescription("");
@@ -265,7 +277,7 @@ export default function StyleBoardsPage() {
       setNewBoardColorPalette([]);
       setShowEdit(false);
       setEditingBoard(null);
-      
+
       toast.success("Board updated successfully!");
     } catch (error: any) {
       toast.error(error.error || error.message || "Failed to update board");
@@ -273,8 +285,8 @@ export default function StyleBoardsPage() {
   };
 
   const toggleTag = (tag: string) => {
-    setNewBoardTags(prev => 
-      prev.includes(tag) 
+    setNewBoardTags(prev =>
+      prev.includes(tag)
         ? prev.filter(t => t !== tag)
         : [...prev, tag]
     );
@@ -282,7 +294,7 @@ export default function StyleBoardsPage() {
 
   const loadAvailableItems = async () => {
     try {
-      const response = await apiClient.getFeed(1, 50); // Get feed items
+      const response = await apiClient.getFeed({ page: 1, limit: 50 }); // Get feed items
       const itemsData = (response as any).data || response;
       setAvailableItems(itemsData.items || []);
     } catch (error: any) {
@@ -292,11 +304,11 @@ export default function StyleBoardsPage() {
 
   const addItemToBoard = async (targetId: string) => {
     if (!selectedBoard) return;
-    
+
     try {
       await apiClient.addItemToBoard(selectedBoard._id, 'design', targetId);
       toast.success("Item added to board successfully!");
-      
+
       // Refresh board data
       const updatedBoard = { ...selectedBoard };
       updatedBoard.sampleItems = [
@@ -305,12 +317,12 @@ export default function StyleBoardsPage() {
       ].filter(Boolean);
       updatedBoard.saveCount = updatedBoard.sampleItems.length;
       setSelectedBoard(updatedBoard);
-      
+
       // Update boards list
-      setBoards(prev => prev.map(board => 
+      setBoards(prev => prev.map(board =>
         board._id === selectedBoard._id ? updatedBoard : board
       ));
-      
+
       // Remove from available items
       setAvailableItems(prev => prev.filter(item => item._id !== targetId));
       setSelectedItems(prev => prev.filter(id => id !== targetId));
@@ -320,8 +332,8 @@ export default function StyleBoardsPage() {
   };
 
   const toggleItemSelection = (itemId: string) => {
-    setSelectedItems(prev => 
-      prev.includes(itemId) 
+    setSelectedItems(prev =>
+      prev.includes(itemId)
         ? prev.filter(id => id !== itemId)
         : [...prev, itemId]
     );
@@ -329,16 +341,16 @@ export default function StyleBoardsPage() {
 
   const addSelectedItems = async () => {
     if (!selectedBoard || selectedItems.length === 0) return;
-    
+
     try {
       for (const itemId of selectedItems) {
         await apiClient.addItemToBoard(selectedBoard._id, 'design', itemId);
       }
-      
+
       toast.success(`${selectedItems.length} items added to board successfully!`);
       setShowAddItems(false);
       setSelectedItems([]);
-      
+
       // Reload board data
       const boardResponse = await apiClient.getBoards(1, 20);
       const boardsData = (boardResponse as any).data || boardResponse;
@@ -357,11 +369,11 @@ export default function StyleBoardsPage() {
     try {
       setLoadingAI(true);
       setSelectedBoardForAI(board);
-      
+
       // Call AI analysis endpoint
       const response = await apiClient.analyzeStyleBoard(board._id);
       const analysisData = (response as any).data || response;
-      
+
       // Update board with AI insights
       const updatedBoard = {
         ...board,
@@ -373,11 +385,11 @@ export default function StyleBoardsPage() {
           compatibilityScore: 0
         }
       };
-      
+
       setBoards(prev => prev.map(b => b._id === board._id ? updatedBoard : b));
       setSelectedBoard(updatedBoard);
       setShowAIInsights(true);
-      
+
       toast.success("AI analysis completed!");
     } catch (error: any) {
       console.error('AI analysis error:', error);
@@ -390,17 +402,17 @@ export default function StyleBoardsPage() {
   const getAIRecommendations = async (board: Board) => {
     try {
       setLoadingAI(true);
-      
+
       // Get AI recommendations based on board preferences
       const response = await apiClient.getBoardAIRecommendations({
         boardId: board._id,
         preferences: board.aiInsights || {},
         count: 12
       });
-      
+
       const recommendationsData = (response as any).data || response;
       setAiRecommendations(recommendationsData.recommendations || []);
-      
+
       toast.success("AI recommendations generated!");
     } catch (error: any) {
       console.error('AI recommendations error:', error);
@@ -414,7 +426,7 @@ export default function StyleBoardsPage() {
     try {
       await apiClient.addItemToBoard(boardId, itemType, itemId);
       toast.success("Item saved to board!");
-      
+
       // Refresh board data
       loadBoards();
     } catch (error: any) {
@@ -436,13 +448,13 @@ export default function StyleBoardsPage() {
 
   // Filter boards based on search term and selected tag
   const filteredBoards = boards.filter(board => {
-    const matchesSearch = !searchTerm || 
+    const matchesSearch = !searchTerm ||
       board.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (board.description && board.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
       board.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-    
+
     const matchesTag = !filterTag || board.tags.includes(filterTag);
-    
+
     return matchesSearch && matchesTag;
   });
 
@@ -551,7 +563,7 @@ export default function StyleBoardsPage() {
               </div>
             ))}
             {/* Add new board */}
-            <button 
+            <button
               onClick={() => setShowNew(true)}
               className="flex flex-col items-center justify-center h-56 rounded-2xl border-2 border-dashed border-surface-border text-text-muted hover:border-brand-500/60 hover:text-brand-400 hover:bg-surface-hover transition-all duration-200"
             >
@@ -771,7 +783,7 @@ export default function StyleBoardsPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="space-y-6">
               {/* Board Info */}
               <div>
@@ -836,7 +848,7 @@ export default function StyleBoardsPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             <div className="space-y-6">
               {/* Available Items Grid */}
               <div>
@@ -844,7 +856,7 @@ export default function StyleBoardsPage() {
                 {availableItems.length > 0 ? (
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     {availableItems.map((item) => (
-                      <div 
+                      <div
                         key={item._id}
                         onClick={() => toggleItemSelection(item._id)}
                         className={cn(
@@ -1002,7 +1014,7 @@ export default function StyleBoardsPage() {
                     </h3>
                     <div className="flex items-center gap-4">
                       <div className="flex-1 bg-surface-hover rounded-full h-2 overflow-hidden">
-                        <div 
+                        <div
                           className="h-full bg-gradient-to-r from-brand-500 to-brand-400 transition-all duration-500"
                           style={{ width: `${selectedBoardForAI.aiInsights.compatibilityScore || 0}%` }}
                         />
@@ -1022,8 +1034,8 @@ export default function StyleBoardsPage() {
                     <Brain className="w-4 h-4 text-brand-400" />
                     AI Recommendations
                   </h3>
-                  <Button 
-                    size="sm" 
+                  <Button
+                    size="sm"
                     onClick={() => getAIRecommendations(selectedBoardForAI)}
                     loading={loadingAI}
                   >
@@ -1037,12 +1049,12 @@ export default function StyleBoardsPage() {
                     {aiRecommendations.map((rec, index) => (
                       <div key={index} className="relative group">
                         <div className="aspect-square rounded-lg overflow-hidden bg-surface-hover">
-                          <Image 
-                            src={rec.imageUrl || '/placeholder-design.jpg'} 
-                            alt={rec.title || 'AI Recommendation'} 
-                            width={200} 
-                            height={200} 
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                          <Image
+                            src={rec.imageUrl || '/placeholder-design.jpg'}
+                            alt={rec.title || 'AI Recommendation'}
+                            width={200}
+                            height={200}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                           />
                         </div>
                         <div className="mt-2">

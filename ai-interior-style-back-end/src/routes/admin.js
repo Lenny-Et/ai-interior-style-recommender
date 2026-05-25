@@ -171,20 +171,19 @@ router.put('/users/:id', async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
 
-    const user = await User.findById(id);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Update allowed fields
-    const allowedFields = ['role', 'isBlocked', 'profile', 'approvalStatus', 'is_verified'];
+    // Only allow safe fields to be updated
+    const allowedFields = ['role', 'isBlocked', 'profile', 'approvalStatus', 'is_verified', 'isPro', 'specialty'];
+    const safeUpdates = {};
     Object.keys(updates).forEach(key => {
       if (allowedFields.includes(key)) {
-        user[key] = updates[key];
+        safeUpdates[key] = updates[key];
       }
     });
 
-    await user.save();
+    const user = await User.findByIdAndUpdate(id, safeUpdates, { new: true, runValidators: false });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     res.json({
       message: 'User updated successfully',
@@ -206,17 +205,14 @@ router.put('/users/:id/approve-designer', async (req, res) => {
       return res.status(400).json({ error: 'Invalid approval status provided.' });
     }
 
-    const user = await User.findById(id);
+    const user = await User.findByIdAndUpdate(
+      id,
+      { approvalStatus },
+      { new: true, runValidators: false }
+    );
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-
-    if (user.role !== 'designer') {
-      return res.status(400).json({ error: 'User is not a designer.' });
-    }
-
-    user.approvalStatus = approvalStatus;
-    await user.save();
 
     const designerName = user.profile?.firstName ? `${user.profile.firstName} ${user.profile.lastName || ''}`.trim() : user.email;
 

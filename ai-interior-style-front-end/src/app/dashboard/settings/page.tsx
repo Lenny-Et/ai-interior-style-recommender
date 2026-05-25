@@ -55,8 +55,10 @@ export default function SettingsPage() {
     setUpgrading(true);
     try {
       const response = await apiClient.initiateProUpgradePayment();
-      if (response.data?.checkoutUrl) {
-        window.location.href = response.data.checkoutUrl; // Redirect to Chapa
+      // apiClient returns the body directly; fall back to .data wrapper for safety
+      const checkoutUrl = (response as any).checkoutUrl || (response as any).data?.checkoutUrl;
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl; // Redirect to Chapa
       } else {
         toast.error("Failed to get payment link.");
       }

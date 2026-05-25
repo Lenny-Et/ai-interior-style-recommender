@@ -191,12 +191,8 @@ router.post('/verify', async (req, res) => {
           await savePaidDesignToLibrary(tx, resolvedSessionId);
         }
       } else if (tx.purchaseType === 'pro_upgrade') {
-        const user = await User.findById(tx.homeownerId);
-        if (user) {
-          user.isPro = true;
-          await user.save();
-          console.log(`User ${tx.homeownerId} upgraded to Pro account.`);
-        }
+        await User.findByIdAndUpdate(tx.homeownerId, { isPro: true }, { new: true });
+        console.log(`User ${tx.homeownerId} upgraded to Pro account.`);
         await PremiumPurchase.create({
           userId: tx.homeownerId,
           purchaseType: 'pro_upgrade',
@@ -315,12 +311,8 @@ router.post('/webhook', async (req, res) => {
         });
         console.log(`Premium AI design access granted for user ${homeownerId}`);
       } else if (result.purchaseType === 'pro_upgrade') {
-        const user = await User.findById(homeownerId);
-        if (user) {
-          user.isPro = true;
-          await user.save();
-          console.log(`User ${homeownerId} upgraded to Pro account via webhook.`);
-        }
+        await User.findByIdAndUpdate(homeownerId, { isPro: true }, { new: true });
+        console.log(`User ${homeownerId} upgraded to Pro account via webhook.`);
         await PremiumPurchase.create({
           userId: homeownerId,
           purchaseType: 'pro_upgrade',

@@ -96,7 +96,6 @@ router.post('/recommend', authenticateToken, async (req, res) => {
       imageUrl,
       roomType = 'Living Room',
       styles = [],
-      budget = '$1,000-$2,500',
       creativity = 0.7,
       usePersonalization = false
     } = req.body;
@@ -112,7 +111,7 @@ router.post('/recommend', authenticateToken, async (req, res) => {
     const hfAccessToken = process.env.HF_ACCESS_TOKEN;
 
     // Use Gemini API to analyze image and generate recommendations
-    const features = await analyzeImageWithGemini(imageUrl, styles, roomType, budget, geminiApiKey, useGeminiFlag);
+    const features = await analyzeImageWithGemini(imageUrl, styles, roomType, geminiApiKey, useGeminiFlag);
 
     // Search for similar designs in our database
     const similarDesigns = await searchSimilarDesigns(features, styles, roomType);
@@ -129,7 +128,6 @@ router.post('/recommend', authenticateToken, async (req, res) => {
       features,
       styles,
       roomType,
-      budget,
       creativity,
       similarDesigns,
       imageUrl, // Pass the original image URL
@@ -163,7 +161,6 @@ router.post('/recommend', authenticateToken, async (req, res) => {
       metadata: {
         roomType,
         styles,
-        budget,
         creativity,
         generatedAt: new Date()
       }
@@ -203,7 +200,7 @@ router.post('/recommend', authenticateToken, async (req, res) => {
       });
 
       // Return fallback recommendations with limit information
-      const fallbackRecommendations = generateCuratedDesignTemplates(styles, roomType, budget);
+      const fallbackRecommendations = generateCuratedDesignTemplates(styles, roomType);
 
       res.json({
         recommendations: fallbackRecommendations,
@@ -211,7 +208,6 @@ router.post('/recommend', authenticateToken, async (req, res) => {
         metadata: {
           roomType,
           styles,
-          budget,
           creativity: 0.7,
           generatedAt: new Date(),
           fallbackUsed: true,
@@ -235,7 +231,7 @@ router.post('/recommend', authenticateToken, async (req, res) => {
         }
       });
 
-      const fallbackRecommendations = generateCuratedDesignTemplates(styles, roomType, budget);
+      const fallbackRecommendations = generateCuratedDesignTemplates(styles, roomType);
 
       res.json({
         recommendations: fallbackRecommendations,
@@ -243,7 +239,6 @@ router.post('/recommend', authenticateToken, async (req, res) => {
         metadata: {
           roomType,
           styles,
-          budget,
           creativity: 0.7,
           generatedAt: new Date(),
           fallbackUsed: true,
@@ -528,7 +523,7 @@ async function searchSimilarDesigns(features, styles, roomType) {
   }
 }
 
-async function analyzeImageWithGemini(imageUrl, styles, roomType, budget, geminiApiKey, useGeminiFlag) {
+async function analyzeImageWithGemini(imageUrl, styles, roomType, geminiApiKey, useGeminiFlag) {
   try {
     const key = geminiApiKey;
     const useGemini = useGeminiFlag && typeof key === 'string' && key.length > 0;
@@ -555,7 +550,6 @@ async function analyzeImageWithGemini(imageUrl, styles, roomType, budget, gemini
     4. What architectural features exist
     5. What style the room currently represents
     6. How it matches the user's preferences: ${styles.join(', ')}
-    7. Budget considerations: ${budget}
     
     CRITICAL: Look at the actual image content, not just assumptions. If the image shows a kitchen but user requested bedroom, note this discrepancy.
     
@@ -957,7 +951,7 @@ async function getUserBoardContext(userId, requestedRoomType = null) {
   }
 }
 
-async function generateDesignRecommendationsWithGemini(features, styles, roomType, budget, creativity, similarDesigns, originalImageUrl, geminiApiKey, useGeminiFlag, hfInferenceApiBaseUrl, hfAccessToken, historicalContext = null) {
+async function generateDesignRecommendationsWithGemini(features, styles, roomType, creativity, similarDesigns, originalImageUrl, geminiApiKey, useGeminiFlag, hfInferenceApiBaseUrl, hfAccessToken, historicalContext = null) {
   try {
     const key = geminiApiKey;
     const useGemini = useGeminiFlag && typeof key === 'string' && key.length > 0;
@@ -965,13 +959,13 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
     const GEMINI_ENDPOINT = `${GEMINI_API_BASE_URL}/v1beta/models/${GEMINI_MODEL}:generateContent`;
     if (!useGemini) {
       console.warn('Gemini disabled or key missing — returning mock recommendations (set USE_GEMINI=true to enable)');
-      return generateMockRecommendations(styles, roomType, budget);
+      return generateMockRecommendations(styles, roomType);
     }
     // If image analysis was already rate-limited, don't burn another API call —
     // skip straight to curated templates to avoid 45s+ of pointless retries.
     if (features._rateLimited) {
       console.warn('Image analysis was rate-limited — skipping Gemini recommendation call, using curated templates');
-      return generateCuratedDesignTemplates(styles, roomType, budget);
+      return generateCuratedDesignTemplates(styles, roomType);
     }
 
     // Get base64 of the original image for Image-to-Image generation
@@ -988,7 +982,6 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
     - Analysis: ${JSON.stringify(features)}
     - Preferred styles: ${styles.join(', ')}
     - Room type: ${roomType}
-    - Budget: ${budget}
     - Creativity level: ${creativity}${historicalContext ? `\n    - Historical Context (Personalization): ${historicalContext}\n    CRITICAL INSTRUCTION FOR PERSONALIZATION: Draw subtle inspiration from the user's Historical Context if possible to deeply personalize the design, but ALWAYS ensure the final output satisfies their explicitly requested 'Preferred styles' and 'Room type' above.` : ''}
     
     CRITICAL: Generate ONLY interior design recommendations for ${roomType}. Do not generate any other content like cars, waterfalls, landscapes, etc.
@@ -1001,7 +994,6 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
         "description": "Brief description of the interior design",
         "style": "Style Name",
         "roomType": "${roomType}",
-        "budget": "${budget}",
         "products": ["Furniture Item 1", "Furniture Item 2", "Furniture Item 3"],
         "imageUrl": "",
         "confidence": 0.85
@@ -1045,13 +1037,13 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
             ? 'Gemini 403 Forbidden (model may require billing) during recommendations — falling back immediately'
             : 'Gemini rate limit hit during recommendations — falling back immediately (no retry)';
           console.warn(reason);
-          return generateCuratedDesignTemplates(styles, roomType, budget);
+          return generateCuratedDesignTemplates(styles, roomType);
         } else if (status >= 500) {
           // Transient server error: retry with backoff
           retryCount++;
           if (retryCount >= maxRetries) {
             console.error(`Gemini server error (Status: ${status}) exceeded max retries during recommendations, using fallback`);
-            return generateCuratedDesignTemplates(styles, roomType, budget);
+            return generateCuratedDesignTemplates(styles, roomType);
           }
           const fixedDelays = [3000, 8000, 15000]; // 3s, 8s, 15s
           const delay = fixedDelays[retryCount - 1] || 15000;
@@ -1072,12 +1064,12 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
       recommendations = JSON.parse(text);
     } catch (parseError) {
       console.warn('Gemini returned non-JSON response for recommendations, using mock data:', text.substring(0, 100));
-      return generateMockRecommendations(styles, roomType, budget);
+      return generateMockRecommendations(styles, roomType);
     }
 
     // Ensure we have at least 1 recommendation
     if (recommendations.length < 1) {
-      return generateMockRecommendations(styles, roomType, budget);
+      return generateMockRecommendations(styles, roomType);
     }
 
     const recommendationsWithImages = await Promise.all(recommendations.map(async (rec) => {
@@ -1101,7 +1093,7 @@ async function generateDesignRecommendationsWithGemini(features, styles, roomTyp
   } catch (error) {
     console.error('Gemini recommendations error:', error);
     // Return mock recommendations if Gemini fails
-    return generateMockRecommendations(styles, roomType, budget);
+    return generateMockRecommendations(styles, roomType);
   }
 }
 
@@ -1155,7 +1147,6 @@ async function saveUserRecommendations(userId, recommendations, imageUrl, metada
       metadata: {
         roomType: metadata.roomType,
         styles: metadata.styles,
-        budget: metadata.budget,
         creativity: metadata.creativity,
         generatedAt: metadata.generatedAt || new Date()
       },
@@ -1208,7 +1199,6 @@ async function saveUserRecommendations(userId, recommendations, imageUrl, metada
             description: rec.description || `Beautiful ${rec.style || 'Modern'} ${rec.roomType || 'Living Room'} design.`,
             style: rec.style || 'Modern',
             roomType: metadata.roomType || 'Living Room',
-            budget: metadata.budget || '$1,000-$2,500',
             products: rec.products || [],
             imageUrl: rec.imageUrl || imageUrl,
             confidence: rec.confidence || 0.85,
@@ -1225,8 +1215,7 @@ async function saveUserRecommendations(userId, recommendations, imageUrl, metada
             originalImageUrl: imageUrl,
             userPreferences: {
               roomType: metadata.roomType || 'Living Room',
-              styles: metadata.styles || [],
-              budget: metadata.budget || '$1,000-$2,500'
+              styles: metadata.styles || []
             },
             generatedAt: metadata.generatedAt || new Date()
           },
@@ -1393,7 +1382,7 @@ function getInteriorImage(roomType, style) {
   return roomImages[style] || Object.values(roomImages)[0];
 }
 
-function generateCuratedDesignTemplates(styles, roomType, budget) {
+function generateCuratedDesignTemplates(styles, roomType) {
   // Professional curated design templates for fallback scenarios
   const templates = {
     'Living Room': [
@@ -1403,7 +1392,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'A sophisticated modern living room with clean lines, neutral colors, and functional furniture',
         style: 'Modern',
         roomType: 'Living Room',
-        budget: '$2,000-3,500',
         price: '$2,500',
         products: ['Sectional Sofa', 'Glass Coffee Table', 'Floor Lamp', 'Area Rug', 'Wall Unit'],
         imageUrl: getInteriorImage('Living Room', 'Modern'),
@@ -1418,7 +1406,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Cozy Scandinavian living room with natural materials, soft textures, and warm lighting',
         style: 'Scandinavian',
         roomType: 'Living Room',
-        budget: '$1,800-2,800',
         price: '$2,200',
         products: ['Comfort Sofa', 'Wood Coffee Table', 'Pendant Lights', 'Throw Pillows', 'Plant Stand'],
         imageUrl: getInteriorImage('Living Room', 'Scandinavian'),
@@ -1433,7 +1420,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'High-end contemporary living room with premium materials and sophisticated styling',
         style: 'Contemporary',
         roomType: 'Living Room',
-        budget: '$4,000-6,000',
         price: '$5,000',
         products: ['Designer Sofa', 'Marble Console', 'Chandelier', 'Art Pieces', 'Premium Rug'],
         imageUrl: getInteriorImage('Living Room', 'Contemporary'),
@@ -1448,7 +1434,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Urban industrial living room with raw materials, exposed elements, and bold design',
         style: 'Industrial',
         roomType: 'Living Room',
-        budget: '$2,500-4,000',
         price: '$3,200',
         products: ['Leather Sectional', 'Metal Shelving', 'Edison Lights', 'Concrete Table', 'Metal Art'],
         imageUrl: getInteriorImage('Living Room', 'Industrial'),
@@ -1465,7 +1450,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Sleek modern kitchen with minimalist cabinetry, integrated appliances, and clean workflow',
         style: 'Modern',
         roomType: 'Kitchen',
-        budget: '$5,000-8,000',
         price: '$6,500',
         products: ['Flat-Panel Cabinets', 'Integrated Appliances', 'Quartz Countertop', 'Under-Cabinet Lighting', 'Storage Solutions'],
         imageUrl: getInteriorImage('Kitchen', 'Modern'),
@@ -1480,7 +1464,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Charming farmhouse kitchen with modern amenities, rustic elements, and warm atmosphere',
         style: 'Farmhouse',
         roomType: 'Kitchen',
-        budget: '$4,000-6,500',
         price: '$5,200',
         products: ['Shaker Cabinets', 'Farmhouse Sink', 'Wood Island', 'Pendant Lights', 'Open Shelving'],
         imageUrl: getInteriorImage('Kitchen', 'Farmhouse'),
@@ -1495,7 +1478,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Professional-grade luxury kitchen with high-end appliances and premium finishes',
         style: 'Contemporary',
         roomType: 'Kitchen',
-        budget: '$8,000-12,000',
         price: '$10,000',
         products: ['Professional Range', 'Custom Cabinetry', 'Marble Countertops', 'Wine Refrigerator', 'Smart Appliances'],
         imageUrl: getInteriorImage('Kitchen', 'Contemporary'),
@@ -1510,7 +1492,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Urban industrial kitchen with exposed elements, metal finishes, and bold design',
         style: 'Industrial',
         roomType: 'Kitchen',
-        budget: '$6,000-9,000',
         price: '$7,500',
         products: ['Metal Cabinets', 'Concrete Countertops', 'Commercial Hood', 'Pipe Shelving', 'Metal Backsplash'],
         imageUrl: getInteriorImage('Kitchen', 'Industrial'),
@@ -1527,7 +1508,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Sleek modern bathroom with floating vanity, frameless shower, and minimalist fixtures',
         style: 'Modern',
         roomType: 'Bathroom',
-        budget: '$3,000-5,000',
         price: '$4,000',
         products: ['Floating Vanity', 'Frameless Shower', 'Rainfall Showerhead', 'Heated Towel Rail', 'LED Mirror'],
         imageUrl: getInteriorImage('Bathroom', 'Modern'),
@@ -1542,7 +1522,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Light and airy Scandinavian bathroom with natural wood accents and soft neutral tones',
         style: 'Scandinavian',
         roomType: 'Bathroom',
-        budget: '$2,500-4,000',
         price: '$3,200',
         products: ['Wood-Accent Vanity', 'Freestanding Tub', 'Natural Stone Tiles', 'Wooden Bath Mat', 'White Fixtures'],
         imageUrl: getInteriorImage('Bathroom', 'Scandinavian'),
@@ -1557,7 +1536,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Hotel-inspired luxury bathroom with premium marble, soaking tub, and bespoke cabinetry',
         style: 'Contemporary',
         roomType: 'Bathroom',
-        budget: '$6,000-10,000',
         price: '$8,000',
         products: ['Freestanding Soaking Tub', 'Marble Tile', 'Custom Double Vanity', 'Smart Toilet', 'Steam Shower'],
         imageUrl: getInteriorImage('Bathroom', 'Luxury'),
@@ -1572,7 +1550,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Bold industrial bathroom with exposed pipes, concrete, and matte black fixtures',
         style: 'Industrial',
         roomType: 'Bathroom',
-        budget: '$3,500-5,500',
         price: '$4,500',
         products: ['Concrete Basin', 'Matte Black Fixtures', 'Open Shelving', 'Subway Tiles', 'Vintage Mirror'],
         imageUrl: getInteriorImage('Bathroom', 'Industrial'),
@@ -1589,7 +1566,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Calm, uncluttered modern bedroom with platform bed, soft lighting, and ample storage',
         style: 'Modern',
         roomType: 'Bedroom',
-        budget: '$2,000-3,500',
         price: '$2,800',
         products: ['Platform Bed', 'Floating Nightstands', 'Built-in Wardrobe', 'Pendant Lights', 'Linen Bedding'],
         imageUrl: getInteriorImage('Bedroom', 'Modern'),
@@ -1604,7 +1580,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Warm Scandinavian bedroom with layered textiles, wood tones, and soft ambient lighting',
         style: 'Scandinavian',
         roomType: 'Bedroom',
-        budget: '$1,800-3,000',
         price: '$2,300',
         products: ['Wooden Bed Frame', 'Wool Throw', 'Rattan Lamp', 'White Linen', 'Potted Plants'],
         imageUrl: getInteriorImage('Bedroom', 'Scandinavian'),
@@ -1619,7 +1594,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Opulent master bedroom with upholstered headboard, designer lighting, and premium fabrics',
         style: 'Contemporary',
         roomType: 'Bedroom',
-        budget: '$5,000-8,000',
         price: '$6,500',
         products: ['Upholstered Bed', 'Designer Dresser', 'Walk-in Wardrobe', 'Chandelier', 'Silk Bedding'],
         imageUrl: getInteriorImage('Bedroom', 'Contemporary'),
@@ -1634,7 +1608,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
         description: 'Eclectic boho bedroom with layered rugs, macramé, plants, and warm earthy tones',
         style: 'Bohemian',
         roomType: 'Bedroom',
-        budget: '$1,500-2,500',
         price: '$2,000',
         products: ['Canopy Bed', 'Layered Rugs', 'Macramé Wall Hanging', 'Rattan Furniture', 'String Lights'],
         imageUrl: getInteriorImage('Bedroom', 'Bohemian'),
@@ -1649,13 +1622,6 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
   // Return templates for the requested room type, or default to Living Room
   const roomTemplates = templates[roomType] || templates['Living Room'];
 
-  // Parse the user's max budget from strings like '$1,000–$2,500' or '$1,000-$2,500'
-  const budgetMax = (() => {
-    if (!budget) return Infinity;
-    const nums = budget.replace(/[^0-9,\-–]/g, '').split(/[-–]/).map(n => parseInt(n.replace(/,/g, ''), 10)).filter(Boolean);
-    return nums.length >= 2 ? nums[1] : (nums[0] || Infinity);
-  })();
-
   // Filter by user's preferred styles if specified
   let candidates = roomTemplates;
   if (styles && styles.length > 0) {
@@ -1669,27 +1635,19 @@ function generateCuratedDesignTemplates(styles, roomType, budget) {
     }
   }
 
-  // Further filter by budget — prefer templates whose price is within range
-  const withinBudget = candidates.filter(template => {
-    const priceNum = parseInt((template.price || '0').replace(/[^0-9]/g, ''), 10);
-    return priceNum <= budgetMax;
-  });
-
-  // Return budget-appropriate templates (fall back to all candidates if none match)
-  return (withinBudget.length >= 1 ? withinBudget : candidates).slice(0, 4);
+  return candidates.slice(0, 4);
 }
 
-function generateMockRecommendations(styles, roomType, budget) {
+function generateMockRecommendations(styles, roomType) {
   const room = roomType || 'Living Room';
   const style = styles[0] || 'Modern';
   return [
     {
       id: 'mock-1',
       name: `${style} ${room} Design`,
-      description: `Clean, well-considered ${style.toLowerCase()} design tailored for a ${room.toLowerCase()} within your budget`,
+      description: `Clean, well-considered ${style.toLowerCase()} design tailored for a ${room.toLowerCase()}`,
       style,
       roomType: room,
-      budget: budget || '$1,000-2,500',
       price: '$1,500-2,000',
       products: ['Primary Furniture Piece', 'Accent Lighting', 'Area Rug', 'Decorative Accessories'],
       imageUrl: getInteriorImage(room, style),
